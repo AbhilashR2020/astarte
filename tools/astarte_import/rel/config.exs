@@ -39,6 +39,13 @@ environment :prod do
   set include_src: false
   set cookie: :"Dscf:|sDIZ&zBW!VIpSO;Pn3u0J4yvj$*.=7SQTa>s9SUt^zeR])m7{oB92c1R0j"
   set vm_args: "rel/vm.args"
+
+  set config_providers: [
+    {Mix.Releases.Config.Providers.Elixir, ["${RELEASE_ROOT_DIR}/etc/config.exs"]}
+  ]
+  set overlays: [
+    {:copy, "rel/config/config.exs", "etc/config.exs"}
+  ]
 end
 
 # You may define one or more releases in this file.
