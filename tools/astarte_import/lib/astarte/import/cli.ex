@@ -31,6 +31,8 @@ defmodule Astarte.Import.CLI do
   end
 
   def main(args) do
+    Application.ensure_all_started(:astarte_import)
+
     with [realm, file_name] <- args,
          true <- String.valid?(realm),
          true <- String.valid?(file_name),
