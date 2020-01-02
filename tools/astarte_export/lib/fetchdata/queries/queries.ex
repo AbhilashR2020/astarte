@@ -118,7 +118,7 @@ end
 
  def retrive_individual_properties(conn, realm, device_id, interface_id, data_type) do
    properties_statement = """
-   SELECT  double_value, reception_timestamp , path from #{realm}.individual_properties 
+   SELECT  #{data_type}, reception_timestamp , path from #{realm}.individual_properties 
      where device_id=? AND interface_id=?
    """
    
@@ -143,7 +143,7 @@ end
 
   def retrive_individual_datastreams(conn, realm, device_id, interface_id, endpoint_id, interface_name, data_type) do
     individual_datastream_statement = """
-    SELECT data_type, reception_timestamp FROM  #{realm}.individual_datastreams WHERE device_id=? AND
+    SELECT #{data_type}, reception_timestamp FROM  #{realm}.individual_datastreams WHERE device_id=? AND
       interface_id=? AND endpoint_id=? AND path=?
     """
     
