@@ -140,7 +140,7 @@ defmodule Astarte.Export.FetchData.Queries do
     end
   end
 
-  def retrive_individual_datastreams(conn, realm, device_id, interface_id, endpoint_id, interface_name, data_type) do
+  def retrive_individual_datastreams(conn, realm, device_id, interface_id, endpoint_id, path, data_type) do
     individual_datastream_statement = """
     SELECT #{data_type}, reception_timestamp FROM  #{realm}.individual_datastreams WHERE device_id=? AND
       interface_id=? AND endpoint_id=? AND path=?
@@ -149,7 +149,7 @@ defmodule Astarte.Export.FetchData.Queries do
     params = [{"uuid", device_id},
               {"uuid", interface_id},
               {"uuid", endpoint_id},
-              {"ascill", interface_name}]
+              {"text", path}]
     
     options = [uuid_format: :binary,
                date_format: :integer] 
@@ -161,6 +161,30 @@ defmodule Astarte.Export.FetchData.Queries do
         # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
         {:error, :database_error}
     
+      {:error, %Xandra.ConnectionError{} = err} ->
+        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        {:error, :database_error}
+    end
+  end
+  
+  defp retrive_object_datastream_value(conn, realm, storage, device_id, path, data_type) do
+    object_datastream_statement = """
+      SELECT reception_timestamp, #{data_type}  from #{realm}.#{storage} where device_id=? AND path=?
+    """
+     
+    params = [{"uuid", device_id},
+              {"text", path}]
+
+    options = [uuid_format: :binary,
+               date_format: :integer]
+
+    with {:ok, result} = Xandra.execute(conn, object_datastream_statement, params, options) do
+      result |> Enum.to_list
+    else
+      {:error, %Xandra.Error{message: message} = err} ->
+        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        {:error, :database_error}
+
       {:error, %Xandra.ConnectionError{} = err} ->
         # Logger.error("database connection error.", log_metadata(realm, device_id, err))
         {:error, :database_error}
