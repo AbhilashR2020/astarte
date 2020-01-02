@@ -114,7 +114,6 @@ defmodule Astarte.Export.FetchData.Queries do
         {:error, :database_error}
     end
   end  
-end
 
  def retrive_individual_properties(conn, realm, device_id, interface_id, data_type) do
    properties_statement = """
@@ -150,7 +149,7 @@ end
     params = [{"uuid", device_id},
               {"uuid", interface_id},
               {"uuid", endpoint_id},
-              {"ascill", path}]
+              {"ascill", interface_name}]
     
     options = [uuid_format: :binary,
                date_format: :integer] 
@@ -167,3 +166,4 @@ end
         {:error, :database_error}
     end
   end
+end 
