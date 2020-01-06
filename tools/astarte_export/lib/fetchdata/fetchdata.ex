@@ -222,21 +222,17 @@ defmodule Astarte.Export.FetchData do
         [%{suffix_path: suffix, data_type: data_type} | acc1]
       end)
 
-    IO.inspect(extract_2nd_level_params)
-    IO.puts("Above values are 2nd level param")
     {:ok, result} = Queries.retrive_object_datastream_value(conn, realm, storage, device_id, path)
 
     values =
       Enum.to_list(result)
       |> Enum.map(fn map ->
-        IO.inspect(map)
 
         reception_timestamp =
           map[:reception_timestamp]
           |> DateTime.from_unix!(:millisecond)
           |> DateTime.to_iso8601()
 
-        IO.inspect(path)
 
         value_list =
           Enum.map_reduce(map, %{}, fn {key, value}, acc ->
@@ -263,7 +259,6 @@ defmodule Astarte.Export.FetchData do
   end
 
   defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id) do
-    IO.puts("Properties data stream")
 
     Enum.reduce(mappings, [], fn mapping, acc1 ->
       endpoint_id = mapping.endpoint_id
@@ -274,7 +269,6 @@ defmodule Astarte.Export.FetchData do
       {:ok, result} =
         Queries.retrive_individual_properties(conn, realm, device_id, interface_id, data_field)
 
-      IO.inspect(result)
 
       values =
         Enum.to_list(result)
