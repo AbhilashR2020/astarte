@@ -116,7 +116,7 @@ defmodule Astarte.Export.FetchData.Queries do
 
   def retrive_individual_properties(conn, realm, device_id, interface_id, data_type) do
     properties_statement = """
-    SELECT  #{data_type}, reception_timestamp , path from #{realm}.individual_properties 
+    SELECT  #{data_type}, reception_timestamp, path, #{data_type} from #{realm}.individual_properties 
       where device_id=? AND interface_id=?
     """
 
@@ -167,9 +167,9 @@ defmodule Astarte.Export.FetchData.Queries do
     end
   end
 
-  defp retrive_object_datastream_value(conn, realm, storage, device_id, path, data_type) do
+  def retrive_object_datastream_value(conn, realm, storage, device_id, path) do
     object_datastream_statement = """
-      SELECT reception_timestamp, #{data_type}  from #{realm}.#{storage} where device_id=? AND path=?
+      SELECT * from #{realm}.#{storage} where device_id=? AND path=?
     """
 
     params = [{"uuid", device_id}, {"text", path}]

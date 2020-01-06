@@ -132,55 +132,19 @@ defmodule Astarte.Export.FetchData do
       {:ok, mappings} = Queries.fetch_interface_mappings(conn, realm, interface_id)
 
       mapped_data_fields =
-        Enum.reduce(mappings, [], fn mapping, acc1 ->
-          endpoint_id = mapping.endpoint_id
-          path = mapping.endpoint
-          data_type = mapping.value_type
+        case interface_type do
+          :datastream ->
+            case aggregation do
+              :object ->
+                fetch_object_datastreams(conn, realm, mappings, device_id, storage)
 
-          values =
-            case interface_type do
-              :datastream ->
-                case aggregation do
-                  :individual ->
-                    fetch_individual_datastream_values(
-                      conn,
-                      realm,
-                      device_id,
-                      interface_id,
-                      endpoint_id,
-                      path,
-                      data_type
-                    )
-
-                  :object ->
-                    fetch_object_datastream_value(
-                      conn,
-                      realm,
-                      storage,
-                      device_id,
-                      path,
-                      data_type
-                    )
-                end
-
-              :properties ->
-                fetch_individual_properties_values(
-                  conn,
-                  realm,
-                  device_id,
-                  interface_id,
-                  data_type
-                )
+              :individual ->
+                fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id)
             end
 
-          case values do
-            [] ->
-              acc1
-
-            _ ->
-              [%{:path => path, :type => {interface_type, aggregation}, :value => values} | acc1]
-          end
-        end)
+          :properties ->
+            fetch_individual_properties(conn, realm, mappings, device_id, interface_id)
+        end
 
       [
         %{
@@ -195,87 +159,139 @@ defmodule Astarte.Export.FetchData do
     end)
   end
 
-  defp fetch_individual_datastream_values(
-         conn,
-         realm,
-         device_id,
-         interface_id,
-         endpoint_id,
-         path,
-         data_type
-       ) do
-    data_field = get_data_field_name(data_type)
+  def fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id) do
+    Enum.reduce(mappings, [], fn mapping, acc1 ->
+      endpoint_id = mapping.endpoint_id
+      path = mapping.endpoint
+      data_type = mapping.value_type
+      data_field = get_data_field_name(data_type)
 
-    {:ok, result} =
-      Queries.retrive_individual_datastreams(
-        conn,
-        realm,
-        device_id,
-        interface_id,
-        endpoint_id,
-        path,
-        data_field
-      )
+      {:ok, result} =
+        Queries.retrive_individual_datastreams(
+          conn,
+          realm,
+          device_id,
+          interface_id,
+          endpoint_id,
+          path,
+          data_field
+        )
+
+      values =
+        Enum.to_list(result)
+        |> Enum.map(fn map ->
+          atom_data_field = String.to_atom(data_field)
+          return_value = map[atom_data_field]
+          value = from_native_type(return_value, data_type)
+
+          reception_timestamp =
+            map[:reception_timestamp]
+            |> DateTime.from_unix!(:millisecond)
+            |> DateTime.to_iso8601()
+
+          Map.new()
+          |> Map.put(:value, value)
+          |> Map.put(:reception_timestamp, reception_timestamp)
+        end)
+
+      case values do
+        [] ->
+          acc1
+
+        _ ->
+          values1 =
+            Map.new()
+            |> Map.put(:path, path)
+            |> Map.put(:value, values)
+
+          [values1 | acc1]
+      end
+    end)
+  end
+
+  def fetch_object_datastreams(conn, realm, [h | _] = mappings, device_id, storage) do
+    fullpath = h.endpoint
+    [_, endpointprefix, _] = String.split(fullpath, "/")
+    path = "/" <> endpointprefix
+
+    extract_2nd_level_params =
+      Enum.reduce(mappings, [], fn mapping, acc1 ->
+        path = mapping.endpoint
+        [_, _, suffix] = String.split(path, "/")
+        data_type = mapping.value_type
+        [%{suffix_path: suffix, data_type: data_type} | acc1]
+      end)
+
+    IO.inspect(extract_2nd_level_params)
+    IO.puts("Above values are 2nd level param")
+    {:ok, result} = Queries.retrive_object_datastream_value(conn, realm, storage, device_id, path)
 
     values =
       Enum.to_list(result)
       |> Enum.map(fn map ->
-        atom_data_field = String.to_atom(data_field)
-
-        return_value =
-          map[atom_data_field]
-          |> to_charlist
+        IO.inspect(map)
 
         reception_timestamp =
           map[:reception_timestamp]
           |> DateTime.from_unix!(:millisecond)
           |> DateTime.to_iso8601()
 
-        Map.replace!(map, atom_data_field, return_value)
-        |> Map.replace!(:reception_timestamp, reception_timestamp)
+        IO.inspect(path)
+
+        value_list =
+          Enum.map_reduce(map, %{}, fn {key, value}, acc ->
+            case to_string(key) do
+              "v_" <> item ->
+                match_object =
+                  Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix] == item end)
+
+                data_type = match_object[:data_type]
+                token = "/" <> match_object[:suffix]
+                value1 = from_native_type(value, :double)
+                Map.put(acc, token, value1)
+
+              _ ->
+                acc
+            end
+          end)
+
+        Map.new()
+        |> Map.put(:reception_timestamp, reception_timestamp)
+        |> Map.put(:path, path)
+        |> Map.put(:values, value_list)
       end)
   end
 
-  defp fetch_object_datastream_value(conn, realm, storage, device_id, path, data_field) do
-    {:ok, result} =
-      Queries.retrive_object_datastream_value(conn, realm, storage, device_id, path, data_field)
+  defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id) do
+    IO.puts("Properties data stream")
 
-    values =
-      Result.all_rows(result)
-      |> Enum.map(fn map ->
-        reception_timestamp =
-          map[:reception_timestamp]
-          |> DateTime.from_unix!(:millisecond)
-          |> DateTime.to_iso8601()
+    Enum.reduce(mappings, [], fn mapping, acc1 ->
+      endpoint_id = mapping.endpoint_id
+      path = mapping.endpoint
+      data_type = mapping.value_type
+      data_field = get_data_field_name(data_type)
 
-        v_realpathdatavalue =
-          map[:v_realpathdatavalue]
-          |> Kernel.to_string()
+      {:ok, result} =
+        Queries.retrive_individual_properties(conn, realm, device_id, interface_id, data_field)
 
-        Map.replace!(map, :reception_timestamp, reception_timestamp)
-        |> Map.replace!(:v_realpathdatavalue, v_realpathdatavalue)
-      end)
-  end
+      IO.inspect(result)
 
-  defp fetch_individual_properties_values(conn, realm, device_id, interface_id, data_field) do
-    result =
-      Queries.retrive_individual_properties(conn, realm, device_id, interface_id, data_field)
+      values =
+        Enum.to_list(result)
+        |> Enum.map(fn map ->
+          reception_timestamp =
+            map[:reception_timestamp]
+            |> DateTime.from_unix!(:millisecond)
+            |> DateTime.to_iso8601()
 
-    values =
-      Result.all_rows(result)
-      |> Enum.map(fn map ->
-        reception_timestamp =
-          map[:reception_timestamp]
-          |> DateTime.from_unix!(:millisecond)
-          |> DateTime.to_iso8601()
+          path =
+            map[:path]
+            |> Kernel.to_string()
 
-        v_realpathdatavalue =
-          map[:v_realpathdatavalue]
-          |> Kernel.to_string()
-
-        Map.replace!(map, :reception_timestamp, reception_timestamp)
-        |> Map.replace!(:v_realpathdatavalue, v_realpathdatavalue)
-      end)
+          Map.replace!(map, :reception_timestamp, reception_timestamp)
+          |> Map.replace!(:path, path)
+        end)
+    end)
   end
 
   def get_data_field_name(data_type) when is_atom(data_type) do
@@ -296,5 +312,50 @@ defmodule Astarte.Export.FetchData do
       :datetimearray -> "datetimearray_value"
       _ -> :error
     end
+  end
+
+  defp from_native_type(value_chars, :double) do
+    to_string(value_chars)
+  end
+
+  defp from_native_type(value_chars, :integer) do
+    to_string(value_chars)
+  end
+
+  defp from_native_type(value_chars, :boolean) do
+    to_string(value_chars)
+  end
+
+  defp from_native_type(value_chars, :longinteger) do
+    to_string(value_chars)
+  end
+
+  defp from_native_type(value_chars, :string) do
+    to_string(value_chars)
+  end
+
+  defp from_native_type(value_chars, :binaryblob) do
+    base64 = to_string(value_chars)
+    {:ok, binary_blob} = Base.encode64(base64)
+    binary_blob
+  end
+
+  defp from_native_type(value_chars, :datetime) do
+    datetime =
+      value_chars
+      |> DateTime.from_unix!(:millisecond)
+      |> DateTime.to_iso8601()
+  end
+
+  defp from_native_type(values, expected_types) when is_map(values) and is_map(expected_types) do
+    obj =
+      Enum.reduce(values, %{}, fn {"/" <> key, value}, acc ->
+        value_type = Map.fetch!(expected_types, key)
+
+        {:ok, native_type} = from_native_type(value, value_type)
+        Map.put(acc, key, native_type)
+      end)
+
+    {:ok, obj}
   end
 end
