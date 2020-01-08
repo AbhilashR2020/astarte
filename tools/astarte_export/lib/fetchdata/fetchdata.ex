@@ -8,7 +8,7 @@ defmodule Astarte.Export.FetchData do
   alias Astarte.Export.FetchData.Queries
   require Logger
 
-  defmodule State do
+  defmodule DeviceData do
     defstruct [
       :device_id,
       :revision,
@@ -29,13 +29,36 @@ defmodule Astarte.Export.FetchData do
     ]
   end
 
+  def fetch_device_data(realm, []) do
+    with {:ok, conn_ref} <- Queries.get_connection() do
+      fetch_device_data(realm, conn: conn_ref, page_size: 1)
+    else
+      _ -> {:error, :connection_setup_failed}
+    end
+  end
+
+  def fetch_device_data(realm, opts) do
+    with {conn, opts1} = Keyword.pop(opts, :conn),
+         {:ok, page} <- Queries.stream_devices(conn, realm, opts1),
+         device_list = page |> Enum.to_list(),
+         false <- islist_empty(device_list),
+         device_data = hd(device_list),
+         {:ok, state} <- process_device_data(conn, realm, device_data) do
+      Keyword.put(opts, :paging_state, page.paging_state)
+      {:more_data, state, [conn: conn, paging_state: page.paging_state, page_size: 1]}
+    else
+      true -> {:ok, :completed}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @spec process_device_data(identifier(), String.t(), list()) :: struct()
 
   def process_device_data(conn, realm, device_data) do
-    #    device_id =
-    #      device_data[:device_id]
-    #      |> Device.encode_device_id()
-    device_id = 0
+    device_id =
+      device_data[:device_id]
+      |> Device.encode_device_id()
+
     revision = device_data[:protocol_revision]
 
     pending_empty_cache =
@@ -94,24 +117,25 @@ defmodule Astarte.Export.FetchData do
 
     interface_details = gen_interface_details(conn, realm, device_data)
 
-    %State{
-      device_id: device_id,
-      revision: revision,
-      pending_empty_cache: pending_empty_cache,
-      secret_bcrypt_hash: secret_bcrypt_hash,
-      first_registration: first_registration,
-      inhibit_request: inhibit_request,
-      cert_aki: cert_aki,
-      cert_serial: cert_serial,
-      first_credentials_request: first_credentials_request,
-      last_credentials_request_ip: last_credentials_request_ip,
-      total_received_msgs: total_received_msgs,
-      total_received_bytes: total_received_bytes,
-      last_connection: last_connection,
-      last_disconnection: last_disconnection,
-      last_seen_ip: last_seen_ip,
-      interfaces: interface_details
-    }
+    {:ok,
+     %DeviceData{
+       device_id: device_id,
+       revision: revision,
+       pending_empty_cache: pending_empty_cache,
+       secret_bcrypt_hash: secret_bcrypt_hash,
+       first_registration: first_registration,
+       inhibit_request: inhibit_request,
+       cert_aki: cert_aki,
+       cert_serial: cert_serial,
+       first_credentials_request: first_credentials_request,
+       last_credentials_request_ip: last_credentials_request_ip,
+       total_received_msgs: total_received_msgs,
+       total_received_bytes: total_received_bytes,
+       last_connection: last_connection,
+       last_disconnection: last_disconnection,
+       last_seen_ip: last_seen_ip,
+       interfaces: interface_details
+     }}
   end
 
   defp gen_interface_details(conn, realm, device_data) do
@@ -152,6 +176,7 @@ defmodule Astarte.Export.FetchData do
           :major_version => major_version1,
           :minor_version => minor_version,
           :active => "true",
+          :interface_type => {interface_type, aggregation},
           :mappings => mapped_data_fields
         }
         | acc
@@ -227,26 +252,39 @@ defmodule Astarte.Export.FetchData do
     values =
       Enum.to_list(result)
       |> Enum.map(fn map ->
-
         reception_timestamp =
           map[:reception_timestamp]
           |> DateTime.from_unix!(:millisecond)
           |> DateTime.to_iso8601()
 
+        list = Map.to_list(map)
 
         value_list =
-          Enum.map_reduce(map, %{}, fn {key, value}, acc ->
+          List.foldl(list, [], fn {key, value}, acc ->
             case to_string(key) do
               "v_" <> item ->
                 match_object =
-                  Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix] == item end)
+                  Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end)
 
-                data_type = match_object[:data_type]
-                token = "/" <> match_object[:suffix]
-                value1 = from_native_type(value, :double)
-                Map.put(acc, token, value1)
+                case match_object do
+                  nil ->
+                    acc
 
-              _ ->
+                  _ ->
+                    data_type = match_object[:data_type]
+                    token = "/" <> match_object[:suffix_path]
+                    value1 = from_native_type(value, :double)
+
+                    case value1 do
+                      "" ->
+                        acc
+
+                      _ ->
+                        [%{:name => token, :value => value1} | acc]
+                    end
+                end
+
+              _Other ->
                 acc
             end
           end)
@@ -254,12 +292,11 @@ defmodule Astarte.Export.FetchData do
         Map.new()
         |> Map.put(:reception_timestamp, reception_timestamp)
         |> Map.put(:path, path)
-        |> Map.put(:values, value_list)
+        |> Map.put(:value, value_list)
       end)
   end
 
   defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id) do
-
     Enum.reduce(mappings, [], fn mapping, acc1 ->
       endpoint_id = mapping.endpoint_id
       path = mapping.endpoint
@@ -269,7 +306,6 @@ defmodule Astarte.Export.FetchData do
       {:ok, result} =
         Queries.retrive_individual_properties(conn, realm, device_id, interface_id, data_field)
 
-
       values =
         Enum.to_list(result)
         |> Enum.map(fn map ->
@@ -278,12 +314,16 @@ defmodule Astarte.Export.FetchData do
             |> DateTime.from_unix!(:millisecond)
             |> DateTime.to_iso8601()
 
-          path =
-            map[:path]
-            |> Kernel.to_string()
+          path = map[:path] |> Kernel.to_string()
 
-          Map.replace!(map, :reception_timestamp, reception_timestamp)
-          |> Map.replace!(:path, path)
+          atom_data_field = String.to_atom(data_field)
+          return_value = map[atom_data_field]
+          value = from_native_type(return_value, data_type)
+
+          Map.new()
+          |> Map.put(:reception_timestamp, reception_timestamp)
+          |> Map.put(:path, path)
+          |> Map.put(:value, value)
         end)
     end)
   end
@@ -352,4 +392,7 @@ defmodule Astarte.Export.FetchData do
 
     {:ok, obj}
   end
+
+  defp islist_empty([]), do: true
+  defp islist_empty(_), do: false
 end

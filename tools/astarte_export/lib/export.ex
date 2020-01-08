@@ -32,7 +32,7 @@ defmodule Astarte.Export do
    -realm-name -> This is a string format of input
    - path      -> path where to export the realm file.
 
-  @spec export_relam_data(String.t, String.t) :: :ok
+  @spec export_relam_data(String.t, String.t) :: :ok | {:error, :invalid_parameters} | {:error, reason}
 
   """
 
@@ -46,22 +46,53 @@ defmodule Astarte.Export do
     end
   end
 
-  defp generate_xml(realm, file) do
-    {:ok, xmlfile} = File.open(file, [:write])
-    Logger.info("Export started.", realm: realm)
-    xml_data = seralize_xml(realm)
-    Logger.info("XML Seralization completed", realm: realm)
-    :ok = IO.puts(xmlfile, xml_data)
-    Logger.info("Export completed into file: #{file}", realm: realm)
-    :ok = File.close(xmlfile)
+  defp write_to_file(file_descriptor, xml_data) do
+    with :ok <- IO.puts(file_descriptor, xml_data) do
+      :ok
+    else
+      reason -> {:error, reason}
+    end
   end
 
-  defp seralize_xml(realm) do
+  def generate_xml(realm, file) do
+    with {:ok, file_descriptor} = File.open(file, [:write]),
+         Logger.info("Export started.", realm: realm),
+         {:ok, :finished} <- generate_xml_1(realm, file_descriptor, []) do
+      Logger.info("Export completed into file: #{file}", realm: realm)
+      File.close(file_descriptor)
+    else
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp generate_xml_1(realm, file_descriptor, opts) do
+    with {:more_data, device_data, updated_options} <- FetchData.fetch_device_data(realm, opts),
+         {:ok, xml_data} <- seralize_to_xml(device_data),
+         :ok <- IO.puts(file_descriptor, "xml_data") do
+      IO.puts("Generate next device data")
+      generate_xml_1(realm, file_descriptor, updated_options)
+    else
+      {:ok, :completed} ->
+        IO.puts("Export completed")
+        tags = astrate_default_close_tags()
+        IO.puts("Adding closing tags")
+        IO.puts(file_descriptor, tags)
+        {:ok, :finished}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def seralize_to_xml(device_data) do
     xml_data =
-      seralize_xml(:astrate, [{:realm, realm}])
+      seralize_xml(:device, device_data)
       |> XmlBuilder.generate()
       |> XmlBuilder.document()
       |> XmlBuilder.generate()
+
+    {:ok, xml_data}
   end
 
   #######################################################################
@@ -72,7 +103,7 @@ defmodule Astarte.Export do
 
   @spec seralize_xml(atom(), struct() | keyword()) :: {atom(), map(), String.t() | keyword()}
 
-  defp seralize_xml(tag, options) do
+  def seralize_xml(tag, options) do
     {tag, get_attributes(tag, options), get_value(tag, options)}
   end
 
@@ -85,28 +116,22 @@ defmodule Astarte.Export do
 
   @spec get_attributes(atom(), struct() | keyword()) :: map()
 
-  defp get_attributes(:device, options) do
-    state = options[:state]
+  defp get_attributes(:device, state) do
     %{:device_id => state.device_id}
   end
 
-  defp get_attributes(:protocol, options) do
-    state = options[:state]
+  defp get_attributes(:protocol, state) do
     %{:revision => state.revision, :pending_empty_cache => state.pending_empty_cache}
   end
 
-  defp get_attributes(:registration, options) do
-    state = options[:state]
-
+  defp get_attributes(:registration, state) do
     %{
       :secret_bcrypt_hash => state.secret_bcrypt_hash,
       :first_registration => state.first_registration
     }
   end
 
-  defp get_attributes(:credentials, options) do
-    state = options[:state]
-
+  defp get_attributes(:credentials, state) do
     %{
       :inhibit_request => state.inhibit_request,
       :cert_serial => state.cert_serial,
@@ -115,9 +140,7 @@ defmodule Astarte.Export do
     }
   end
 
-  defp get_attributes(:stats, options) do
-    state = options[:state]
-
+  defp get_attributes(:stats, state) do
     %{
       :total_received_msgs => state.total_received_msgs,
       :total_received_bytes => state.total_received_bytes,
@@ -176,59 +199,34 @@ defmodule Astarte.Export do
           | charlist()
           | maybe_improper_list()
 
-  defp get_value(:astrate, options) do
-    [seralize_xml(:devices, options)]
-  end
-
-  defp get_value(:devices, realm: realm) do
-    {:ok, conn} = FetchData.get_connection(realm)
-    Logger.info("Connected to database.", realm: realm)
-    devices = FetchData.get_devices(conn)
-    Logger.info("Extracted devices information from realm", realm: realm)
-
-    Enum.reduce(devices, [], fn device_data, acc ->
-      state = FetchData.process_device_data(conn, device_data)
-      acc ++ [seralize_xml(:device, state: state, realm: realm)]
-    end)
-  end
-
-  defp get_value(:device, options) do
+  defp get_value(:device, state) do
     tag_list = [:protocol, :registration, :credentials, :stats, :interfaces]
 
     Enum.reduce(tag_list, [], fn tag, acc ->
-      acc ++ [seralize_xml(tag, options)]
+      acc ++ [seralize_xml(tag, state)]
     end)
   end
 
-  defp get_value(:interfaces, options) do
-    state = options[:state]
-
+  defp get_value(:interfaces, state) do
     Enum.reduce(state.interfaces, [], fn interface_state, acc ->
       acc ++ [seralize_xml(:interface, interface_state)]
     end)
   end
 
-  defp get_value(:interface, interface_state) do
-    mappings = interface_state.mappings
+  defp get_value(:interface, state) do
+    mappings = state.mappings
+    interface_type = state.interface_type
 
     Enum.reduce(mappings, [], fn mapping, acc ->
-      output =
-        case mapping.type do
-          {:datastream, _} ->
-            seralize_xml(:datastream, mapping)
+      case interface_type do
+        {:datastream, :individual} ->
+          acc ++ [seralize_xml(:datastream, mapping)]
 
-          {:properties, _} ->
-            Enum.reduce(mapping.value, [], fn value, acc ->
-              acc ++ [seralize_xml(:property, value)]
-            end)
-        end
-
-      case mapping.type do
-        {:datastream, _} ->
-          acc ++ [output]
+        {:datastream, :object} ->
+          acc ++ [seralize_xml(:datastream, mapping)]
 
         {:properties, _} ->
-          List.flatten(acc ++ [output])
+          acc ++ [seralize_xml(:property, mapping)]
       end
     end)
   end
@@ -278,5 +276,18 @@ defmodule Astarte.Export do
       to_string(minute) <>
       "_" <>
       to_string(second)
+  end
+
+  defp default_xml_header() do
+    XmlBuilder.document("")
+    |> XmlBuilder.generate()
+  end
+
+  defp astrate_default_open_tags do
+    "<astrate>\n<devices>\n"
+  end
+
+  defp astrate_default_close_tags do
+    "</devices>\n</astrate>"
   end
 end
