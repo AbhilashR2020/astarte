@@ -201,12 +201,8 @@ defmodule Astarte.Export do
 
     Enum.reduce(mappings, [], fn mapping, acc ->
       case interface_type do
-        {:datastream, :individual} ->
+        {:datastream, _} ->
           acc ++ [serialize_xml(:datastream, mapping)]
-
-        {:datastream, :object} ->
-          acc ++ [serialize_xml(:datastream, mapping)]
-
         {:properties, _} ->
           acc ++ [serialize_xml(:property, mapping)]
       end
@@ -216,14 +212,12 @@ defmodule Astarte.Export do
   defp get_value(:datastream, mapping) do
     Enum.reduce(mapping.value, [], fn value, acc ->
       output =
-        case mapping.type do
-          {_, :object} ->
+        case mapping.aggregation do
+          :object ->
             serialize_xml(:object, value)
-
-          {_, :individual} ->
+          :individual ->
             serialize_xml(:value, value)
         end
-
       acc ++ [output]
     end)
   end

@@ -251,7 +251,7 @@ defmodule Astarte.Export.FetchData do
              map[:reception_timestamp]
              |> DateTime.from_unix!(:millisecond)
              |> DateTime.to_iso8601()
-
+           
            list = Map.to_list(map)
 
            value_list =
@@ -276,19 +276,20 @@ defmodule Astarte.Export.FetchData do
                _Other -> acc1
              end
            end)
-
+           final_acc = 
            case acc do
 	     %{} ->
 	        %{path: path,
                   aggregation: :object, 
   	          value: [%{reception_timestamp: reception_timestamp, 
 	                    value: value_list}]}
-	     _  ->
+	     _value ->
 	        inner_list = acc.value
 	        updated_list = [%{reception_timestamp: reception_timestamp, 
-	   		          value: value_list} | inner_list]
+	   		          value: value_list}]  ++ inner_list
 	        %{acc | value: updated_list}
 	   end
+          final_acc
      end)
     [values] 
   end
