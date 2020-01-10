@@ -36,11 +36,11 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        #Logger.error("database error: #{message}.", log_metadata(realm, interface, err))
+        # Logger.error("database error: #{message}.", log_metadata(realm, interface, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        #Logger.error("database connection error.", log_metadata(realm, interface, err))
+        # Logger.error("database connection error.", log_metadata(realm, interface, err))
         {:error, :database_error}
     end
   end
@@ -67,7 +67,8 @@ defmodule Astarte.Export.FetchData.Queries do
           with nil <- Keyword.get(options, :paging_state) do
             [page_size: value]
           else
-            paging_value -> [page_size: 1, paging_state: paging_value]
+            paging_value ->
+              [page_size: 1, paging_state: paging_value]
           end
         end
 
@@ -128,11 +129,11 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        #Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        #Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
         {:error, :database_error}
     end
   end
@@ -158,11 +159,11 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        #Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        #Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
         {:error, :database_error}
     end
   end
@@ -180,11 +181,11 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        #Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        #Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
         {:error, :database_error}
     end
   end

@@ -18,6 +18,7 @@
 
 defmodule Astarte.Export do
   alias Astarte.Export.FetchData
+  alias Astarte.Import.LogFmtFormatter
   require Logger
 
   @moduledoc """
@@ -25,7 +26,7 @@ defmodule Astarte.Export do
     data in a xml format. This data can be used by astarte_import 
     application utlity  to import into a new realm.
   """
-  
+
   @doc """
   The export_realm_data/2 function required 2 arguments to export 
   the realm data into XML format.
@@ -57,9 +58,10 @@ defmodule Astarte.Export do
 
   def generate_xml(realm, file) do
     with {:ok, file_descriptor} = File.open(file, [:write]),
-         Logger.info("Export started.", realm: realm),
+         # Logger.info("Export started.", realm: realm),
+         start_tags = astarte_default_open_tags,
+         :ok <- IO.puts(file_descriptor, start_tags),
          {:ok, :finished} <- generate_xml_1(realm, file_descriptor, []) do
-      Logger.info("Export completed into file: #{file}", realm: realm)
       File.close(file_descriptor)
     else
       {:error, reason} ->
@@ -70,7 +72,7 @@ defmodule Astarte.Export do
   defp generate_xml_1(realm, file_descriptor, opts) do
     with {:more_data, device_data, updated_options} <- FetchData.fetch_device_data(realm, opts),
          {:ok, xml_data} <- serialize_to_xml(device_data),
-         :ok <- IO.puts(file_descriptor, "xml_data") do
+         :ok <- IO.puts(file_descriptor, xml_data) do
       generate_xml_1(realm, file_descriptor, updated_options)
     else
       {:ok, :completed} ->
@@ -87,19 +89,15 @@ defmodule Astarte.Export do
     xml_data =
       serialize_xml(:device, device_data)
       |> XmlBuilder.generate()
-      |> XmlBuilder.document()
-      |> XmlBuilder.generate()
 
     {:ok, xml_data}
   end
-
 
   @spec serialize_xml(atom(), struct() | keyword()) :: {atom(), map(), String.t() | keyword()}
 
   def serialize_xml(tag, options) do
     {tag, get_attributes(tag, options), get_value(tag, options)}
   end
-
 
   @spec get_attributes(atom(), struct() | keyword()) :: map()
 
@@ -108,8 +106,7 @@ defmodule Astarte.Export do
   end
 
   defp get_attributes(:protocol, state) do
-    %{revision: state.revision, 
-	  pending_empty_cache: state.pending_empty_cache}
+    %{revision: state.revision, pending_empty_cache: state.pending_empty_cache}
   end
 
   defp get_attributes(:registration, state) do
@@ -168,13 +165,12 @@ defmodule Astarte.Export do
   end
 
   defp get_attributes(:item, value) do
-    %{name: value.path}
+    %{name: value.name}
   end
 
   defp get_attributes(_tag, _value) do
     %{}
   end
-
 
   @spec get_value(atom(), struct() | keyword()) ::
           String.t()
@@ -203,6 +199,7 @@ defmodule Astarte.Export do
       case interface_type do
         {:datastream, _} ->
           acc ++ [serialize_xml(:datastream, mapping)]
+
         {:properties, _} ->
           acc ++ [serialize_xml(:property, mapping)]
       end
@@ -215,15 +212,19 @@ defmodule Astarte.Export do
         case mapping.aggregation do
           :object ->
             serialize_xml(:object, value)
+
           :individual ->
             serialize_xml(:value, value)
         end
+
       acc ++ [output]
     end)
   end
 
-  defp get_value(:object, value) do
-    [serialize_xml(:item, value)]
+  defp get_value(:object, state) do
+    Enum.reduce(state.value, [], fn value, acc ->
+      [serialize_xml(:item, value) | acc]
+    end)
   end
 
   defp get_value(:property, value) do

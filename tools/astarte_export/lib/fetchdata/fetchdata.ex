@@ -173,8 +173,8 @@ defmodule Astarte.Export.FetchData do
       [
         %{
           interface_name: interface_name,
-          major_version:  major_version1,
-          minor_version:  minor_version,
+          major_version: major_version1,
+          minor_version: minor_version,
           active: "true",
           interface_type: {interface_type, aggregation},
           mappings: mapped_data_fields
@@ -214,8 +214,7 @@ defmodule Astarte.Export.FetchData do
             |> DateTime.from_unix!(:millisecond)
             |> DateTime.to_iso8601()
 
-          %{value: value,
-            reception_timestamp: reception_timestamp}
+          %{value: value, reception_timestamp: reception_timestamp}
         end)
 
       case values do
@@ -223,9 +222,7 @@ defmodule Astarte.Export.FetchData do
           acc1
 
         _ ->
-         [%{path: path, 
-            aggregation: :individual,
-	    value: values} | acc1]
+          [%{path: path, aggregation: :individual, value: values} | acc1]
       end
     end)
   end
@@ -243,55 +240,66 @@ defmodule Astarte.Export.FetchData do
         [%{suffix_path: suffix, data_type: data_type} | acc1]
       end)
 
-    {:ok, result} = Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path)
+    {:ok, result} =
+      Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path)
+
     result1 = Enum.to_list(result)
-    values =
+
+    value =
       Enum.reduce(result1, %{}, fn map, acc ->
-           reception_timestamp =
-             map[:reception_timestamp]
-             |> DateTime.from_unix!(:millisecond)
-             |> DateTime.to_iso8601()
-           
-           list = Map.to_list(map)
+        reception_timestamp =
+          map[:reception_timestamp]
+          |> DateTime.from_unix!(:millisecond)
+          |> DateTime.to_iso8601()
 
-           value_list =
-           List.foldl(list, [], fn {key, value}, acc1 ->
-             case to_string(key) do
-               "v_" <> item ->
-                   match_object =
-                   Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end)
+        list = Map.to_list(map)
 
-                   case match_object do
-                     nil -> acc1
-                     _ ->
-                       data_type = match_object[:data_type]
-                       token = "/" <> match_object[:suffix_path]
-                       value1 = from_native_type(value, :double)
-                       case value1 do
-                         "" -> acc1
-                         _ -> [%{name: token, value: value1} | acc1]
-                       end
-                   end
+        value_list =
+          List.foldl(list, [], fn {key, value}, acc1 ->
+            case to_string(key) do
+              "v_" <> item ->
+                match_object =
+                  Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end)
 
-               _Other -> acc1
-             end
-           end)
-           final_acc = 
-           case acc do
-	     %{} ->
-	        %{path: path,
-                  aggregation: :object, 
-  	          value: [%{reception_timestamp: reception_timestamp, 
-	                    value: value_list}]}
-	     _value ->
-	        inner_list = acc.value
-	        updated_list = [%{reception_timestamp: reception_timestamp, 
-	   		          value: value_list}]  ++ inner_list
-	        %{acc | value: updated_list}
-	   end
-          final_acc
-     end)
-    [values] 
+                case match_object do
+                  nil ->
+                    acc1
+
+                  _ ->
+                    data_type = match_object[:data_type]
+                    token = "/" <> match_object[:suffix_path]
+                    value1 = from_native_type(value, :double)
+
+                    case value1 do
+                      "" -> acc1
+                      _ -> [%{name: token, value: value1} | acc1]
+                    end
+                end
+
+              _Other ->
+                acc1
+            end
+          end)
+
+        case acc == %{} do
+          true ->
+            %{
+              path: path,
+              aggregation: :object,
+              value: [%{reception_timestamp: reception_timestamp, value: value_list}]
+            }
+
+          false ->
+            inner_list = acc.value
+
+            updated_list =
+              [%{reception_timestamp: reception_timestamp, value: value_list}] ++ inner_list
+
+            %{acc | value: updated_list}
+        end
+      end)
+
+    [value]
   end
 
   defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id) do
