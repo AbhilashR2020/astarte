@@ -6,7 +6,6 @@ defmodule Astarte.Export.FetchData do
   alias Astarte.DataAccess.Interface
   alias Astarte.DataAccess.Mappings
   alias Astarte.Export.FetchData.Queries
-  require Logger
 
   defmodule DeviceData do
     defstruct [

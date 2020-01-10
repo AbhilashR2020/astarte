@@ -18,7 +18,6 @@
 
 defmodule Astarte.Export do
   alias Astarte.Export.FetchData
-  alias Astarte.Import.LogFmtFormatter
   require Logger
 
   @moduledoc """
@@ -48,21 +47,13 @@ defmodule Astarte.Export do
     end
   end
 
-  defp write_to_file(file_descriptor, xml_data) do
-    with :ok <- IO.puts(file_descriptor, xml_data) do
-      :ok
-    else
-      reason -> {:error, reason}
-    end
-  end
-
   def generate_xml(realm, file) do
+    Logger.info("Export started.", realm: realm)
     with {:ok, file_descriptor} = File.open(file, [:write]),
-         # Logger.info("Export started.", realm: realm),
          start_tags = astarte_default_open_tags,
          :ok <- IO.puts(file_descriptor, start_tags),
          {:ok, :finished} <- generate_xml_1(realm, file_descriptor, []) do
-      File.close(file_descriptor)
+         File.close(file_descriptor)
     else
       {:error, reason} ->
         {:error, reason}
@@ -78,8 +69,9 @@ defmodule Astarte.Export do
       {:ok, :completed} ->
         tags = astarte_default_close_tags()
         IO.puts(file_descriptor, tags)
+        Logger.info("Export Completed.", realm: realm)
         {:ok, :finished}
-
+      
       {:error, reason} ->
         {:error, reason}
     end

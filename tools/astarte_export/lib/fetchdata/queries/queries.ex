@@ -36,11 +36,11 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        # Logger.error("database error: #{message}.", log_metadata(realm, interface, err))
+        #Logger.error("database error: #{message}.", log_metadata(realm, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        # Logger.error("database connection error.", log_metadata(realm, interface, err))
+        # Logger.error("database connection error.", log_metadata(realm, err))
         {:error, :database_error}
     end
   end
