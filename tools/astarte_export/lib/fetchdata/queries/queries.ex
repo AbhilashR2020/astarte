@@ -6,7 +6,7 @@ defmodule Astarte.Export.FetchData.Queries do
   require Logger
 
   def get_connection() do
-    nodes = Application.get_env(:cqerl, :cassandra_nodes)
+    nodes = Application.get_env(:xandra, :cassandra_nodes)
     {host, port} = Enum.random(nodes)
     Logger.info("Connecting to #{host}:#{port} cassandra database.")
 
@@ -16,7 +16,7 @@ defmodule Astarte.Export.FetchData.Queries do
     {:ok, xandra_conn}
   end
 
-  def retrive_interface_row(conn, realm, interface, major_version) do
+  def retrieve_interface_row(conn, realm, interface, major_version) do
     interface_statement = """
     SELECT name, major_version, minor_version, interface_id, type, ownership, aggregation,
       storage, storage_type, automaton_transitions, automaton_accepting_states
@@ -36,17 +36,17 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        #Logger.error("database error: #{message}.", log_metadata(realm, interface, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        #Logger.error("database connection error.", log_metadata(realm, interface, err))
         {:error, :database_error}
     end
   end
 
   def fetch_interface_descriptor(conn, realm, interface, major_version) do
-    with {:ok, interface_row} <- retrive_interface_row(conn, realm, interface, major_version) do
+    with {:ok, interface_row} <- retrieve_interface_row(conn, realm, interface, major_version) do
       interface_row
       |> Enum.to_list()
       |> hd
@@ -75,11 +75,11 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        # Logger.error("database error: #{message}.", log_metadata(realm, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        # Logger.error("database connection error.", log_metadata(realm, err))
         {:error, :database_error}
     end
   end
@@ -105,16 +105,16 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, mappings_1}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        # Logger.error("database error: #{message}.", log_metadata(realm, interface_id, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        # Logger.error("database connection error.", log_metadata(realm, interface_id, err))
         {:error, :database_error}
     end
   end
 
-  def retrive_individual_properties(conn, realm, device_id, interface_id, data_type) do
+  def retrieve_individual_properties(conn, realm, device_id, interface_id, data_type) do
     properties_statement = """
     SELECT  #{data_type}, reception_timestamp, path, #{data_type} from #{realm}.individual_properties 
       where device_id=? AND interface_id=?
@@ -128,16 +128,16 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        #Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        #Logger.error("database connection error.", log_metadata(realm, device_id, err))
         {:error, :database_error}
     end
   end
 
-  def retrive_individual_datastreams(
+  def retrieve_individual_datastreams(
         conn,
         realm,
         device_id,
@@ -158,16 +158,16 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        #Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        #Logger.error("database connection error.", log_metadata(realm, device_id, err))
         {:error, :database_error}
     end
   end
 
-  def retrive_object_datastream_value(conn, realm, storage, device_id, path) do
+  def retrieve_object_datastream_value(conn, realm, storage, device_id, path) do
     object_datastream_statement = """
       SELECT * from #{realm}.#{storage} where device_id=? AND path=?
     """
@@ -180,11 +180,11 @@ defmodule Astarte.Export.FetchData.Queries do
       {:ok, result}
     else
       {:error, %Xandra.Error{message: message} = err} ->
-        # Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
+        #Logger.error("database error: #{message}.", log_metadata(realm, device_id, err))
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        # Logger.error("database connection error.", log_metadata(realm, device_id, err))
+        #Logger.error("database connection error.", log_metadata(realm, device_id, err))
         {:error, :database_error}
     end
   end

@@ -172,12 +172,12 @@ defmodule Astarte.Export.FetchData do
 
       [
         %{
-          :interface_name => interface_name,
-          :major_version => major_version1,
-          :minor_version => minor_version,
-          :active => "true",
-          :interface_type => {interface_type, aggregation},
-          :mappings => mapped_data_fields
+          interface_name: interface_name,
+          major_version:  major_version1,
+          minor_version:  minor_version,
+          active: "true",
+          interface_type: {interface_type, aggregation},
+          mappings: mapped_data_fields
         }
         | acc
       ]
@@ -192,7 +192,7 @@ defmodule Astarte.Export.FetchData do
       data_field = get_data_field_name(data_type)
 
       {:ok, result} =
-        Queries.retrive_individual_datastreams(
+        Queries.retrieve_individual_datastreams(
           conn,
           realm,
           device_id,
@@ -214,9 +214,8 @@ defmodule Astarte.Export.FetchData do
             |> DateTime.from_unix!(:millisecond)
             |> DateTime.to_iso8601()
 
-          Map.new()
-          |> Map.put(:value, value)
-          |> Map.put(:reception_timestamp, reception_timestamp)
+          %{value: value,
+            reception_timestamp: reception_timestamp}
         end)
 
       case values do
@@ -224,12 +223,9 @@ defmodule Astarte.Export.FetchData do
           acc1
 
         _ ->
-          values1 =
-            Map.new()
-            |> Map.put(:path, path)
-            |> Map.put(:value, values)
-
-          [values1 | acc1]
+         [%{path: path, 
+            aggregation: :individual,
+	    value: values} | acc1]
       end
     end)
   end
@@ -247,53 +243,54 @@ defmodule Astarte.Export.FetchData do
         [%{suffix_path: suffix, data_type: data_type} | acc1]
       end)
 
-    {:ok, result} = Queries.retrive_object_datastream_value(conn, realm, storage, device_id, path)
-
+    {:ok, result} = Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path)
+    result1 = Enum.to_list(result)
     values =
-      Enum.to_list(result)
-      |> Enum.map(fn map ->
-        reception_timestamp =
-          map[:reception_timestamp]
-          |> DateTime.from_unix!(:millisecond)
-          |> DateTime.to_iso8601()
+      Enum.reduce(result1, %{}, fn map, acc ->
+           reception_timestamp =
+             map[:reception_timestamp]
+             |> DateTime.from_unix!(:millisecond)
+             |> DateTime.to_iso8601()
 
-        list = Map.to_list(map)
+           list = Map.to_list(map)
 
-        value_list =
-          List.foldl(list, [], fn {key, value}, acc ->
-            case to_string(key) do
-              "v_" <> item ->
-                match_object =
-                  Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end)
+           value_list =
+           List.foldl(list, [], fn {key, value}, acc1 ->
+             case to_string(key) do
+               "v_" <> item ->
+                   match_object =
+                   Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end)
 
-                case match_object do
-                  nil ->
-                    acc
+                   case match_object do
+                     nil -> acc1
+                     _ ->
+                       data_type = match_object[:data_type]
+                       token = "/" <> match_object[:suffix_path]
+                       value1 = from_native_type(value, :double)
+                       case value1 do
+                         "" -> acc1
+                         _ -> [%{name: token, value: value1} | acc1]
+                       end
+                   end
 
-                  _ ->
-                    data_type = match_object[:data_type]
-                    token = "/" <> match_object[:suffix_path]
-                    value1 = from_native_type(value, :double)
+               _Other -> acc1
+             end
+           end)
 
-                    case value1 do
-                      "" ->
-                        acc
-
-                      _ ->
-                        [%{:name => token, :value => value1} | acc]
-                    end
-                end
-
-              _Other ->
-                acc
-            end
-          end)
-
-        Map.new()
-        |> Map.put(:reception_timestamp, reception_timestamp)
-        |> Map.put(:path, path)
-        |> Map.put(:value, value_list)
-      end)
+           case acc do
+	     %{} ->
+	        %{path: path,
+                  aggregation: :object, 
+  	          value: [%{reception_timestamp: reception_timestamp, 
+	                    value: value_list}]}
+	     _  ->
+	        inner_list = acc.value
+	        updated_list = [%{reception_timestamp: reception_timestamp, 
+	   		          value: value_list} | inner_list]
+	        %{acc | value: updated_list}
+	   end
+     end)
+    [values] 
   end
 
   defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id) do
@@ -304,7 +301,7 @@ defmodule Astarte.Export.FetchData do
       data_field = get_data_field_name(data_type)
 
       {:ok, result} =
-        Queries.retrive_individual_properties(conn, realm, device_id, interface_id, data_field)
+        Queries.retrieve_individual_properties(conn, realm, device_id, interface_id, data_field)
 
       values =
         Enum.to_list(result)
@@ -320,10 +317,7 @@ defmodule Astarte.Export.FetchData do
           return_value = map[atom_data_field]
           value = from_native_type(return_value, data_type)
 
-          Map.new()
-          |> Map.put(:reception_timestamp, reception_timestamp)
-          |> Map.put(:path, path)
-          |> Map.put(:value, value)
+          %{reception_timestamp: reception_timestamp, path: path, value: value}
         end)
     end)
   end
@@ -344,7 +338,6 @@ defmodule Astarte.Export.FetchData do
       :stringarray -> "stringarray_value"
       :binaryblobarray -> "binaryblobarray_value"
       :datetimearray -> "datetimearray_value"
-      _ -> :error
     end
   end
 

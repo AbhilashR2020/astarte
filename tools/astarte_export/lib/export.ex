@@ -21,10 +21,11 @@ defmodule Astarte.Export do
   require Logger
 
   @moduledoc """
-  This  module provide API functions to export realm device 
-  data in a xml format. This data can be used by astarte_import 
-  application utlity  to import into a new realm.
+    This  module provide API functions to export realm device 
+    data in a xml format. This data can be used by astarte_import 
+    application utlity  to import into a new realm.
   """
+  
   @doc """
   The export_realm_data/2 function required 2 arguments to export 
   the realm data into XML format.
@@ -32,7 +33,7 @@ defmodule Astarte.Export do
    -realm-name -> This is a string format of input
    - path      -> path where to export the realm file.
 
-  @spec export_relam_data(String.t, String.t) :: :ok | {:error, :invalid_parameters} | {:error, reason}
+  @spec export_realm_data(String.t, String.t) :: :ok | {:error, :invalid_parameters} | {:error, reason}
 
   """
 
@@ -68,15 +69,12 @@ defmodule Astarte.Export do
 
   defp generate_xml_1(realm, file_descriptor, opts) do
     with {:more_data, device_data, updated_options} <- FetchData.fetch_device_data(realm, opts),
-         {:ok, xml_data} <- seralize_to_xml(device_data),
+         {:ok, xml_data} <- serialize_to_xml(device_data),
          :ok <- IO.puts(file_descriptor, "xml_data") do
-      IO.puts("Generate next device data")
       generate_xml_1(realm, file_descriptor, updated_options)
     else
       {:ok, :completed} ->
-        IO.puts("Export completed")
-        tags = astrate_default_close_tags()
-        IO.puts("Adding closing tags")
+        tags = astarte_default_close_tags()
         IO.puts(file_descriptor, tags)
         {:ok, :finished}
 
@@ -85,9 +83,9 @@ defmodule Astarte.Export do
     end
   end
 
-  def seralize_to_xml(device_data) do
+  def serialize_to_xml(device_data) do
     xml_data =
-      seralize_xml(:device, device_data)
+      serialize_xml(:device, device_data)
       |> XmlBuilder.generate()
       |> XmlBuilder.document()
       |> XmlBuilder.generate()
@@ -95,58 +93,48 @@ defmodule Astarte.Export do
     {:ok, xml_data}
   end
 
-  #######################################################################
-  # This function will seralize the realm data  to the below format 
-  # {:tag_name, %{}, ""} 
-  # which is used by XmlBuilder library to convert to a xml string 
-  #######################################################################
 
-  @spec seralize_xml(atom(), struct() | keyword()) :: {atom(), map(), String.t() | keyword()}
+  @spec serialize_xml(atom(), struct() | keyword()) :: {atom(), map(), String.t() | keyword()}
 
-  def seralize_xml(tag, options) do
+  def serialize_xml(tag, options) do
     {tag, get_attributes(tag, options), get_value(tag, options)}
   end
 
-  ######################################################################
-  #
-  # get_attributes/2 return a map which hold all attributes to be 
-  # included in a specific XML tag
-  #
-  ######################################################################
 
   @spec get_attributes(atom(), struct() | keyword()) :: map()
 
   defp get_attributes(:device, state) do
-    %{:device_id => state.device_id}
+    %{device_id: state.device_id}
   end
 
   defp get_attributes(:protocol, state) do
-    %{:revision => state.revision, :pending_empty_cache => state.pending_empty_cache}
+    %{revision: state.revision, 
+	  pending_empty_cache: state.pending_empty_cache}
   end
 
   defp get_attributes(:registration, state) do
     %{
-      :secret_bcrypt_hash => state.secret_bcrypt_hash,
-      :first_registration => state.first_registration
+      secret_bcrypt_hash: state.secret_bcrypt_hash,
+      first_registration: state.first_registration
     }
   end
 
   defp get_attributes(:credentials, state) do
     %{
-      :inhibit_request => state.inhibit_request,
-      :cert_serial => state.cert_serial,
-      :cert_aki => state.cert_aki,
-      :first_credentials_request => state.first_credentials_request
+      inhibit_request: state.inhibit_request,
+      cert_serial: state.cert_serial,
+      cert_aki: state.cert_aki,
+      first_credentials_request: state.first_credentials_request
     }
   end
 
   defp get_attributes(:stats, state) do
     %{
-      :total_received_msgs => state.total_received_msgs,
-      :total_received_bytes => state.total_received_bytes,
-      :last_connection => state.last_connection,
-      :last_disconnection => state.last_disconnection,
-      :last_seen_ip => state.last_seen_ip
+      total_received_msgs: state.total_received_msgs,
+      total_received_bytes: state.total_received_bytes,
+      last_connection: state.last_connection,
+      last_disconnection: state.last_disconnection,
+      last_seen_ip: state.last_seen_ip
     }
   end
 
@@ -156,23 +144,23 @@ defmodule Astarte.Export do
 
   defp get_attributes(:interface, state) do
     %{
-      :name => state.interface_name,
-      :major_version => state.major_version,
-      :minor_version => state.minor_version,
-      :active => state.active
+      name: state.interface_name,
+      major_version: state.major_version,
+      minor_version: state.minor_version,
+      active: state.active
     }
   end
 
   defp get_attributes(:datastream, {_type, state}) do
-    %{:path => state.path}
+    %{path: state.path}
   end
 
   defp get_attributes(:property, state) do
-    %{:path => state[:path], :reception_timestamp => state[:reception_timestamp]}
+    %{path: state.path, reception_timestamp: state.reception_timestamp}
   end
 
   defp get_attributes(:object, state) do
-    %{:reception_timestamp => state[:reception_timestamp]}
+    %{reception_timestamp: state.reception_timestamp}
   end
 
   defp get_attributes(:value, state) do
@@ -180,19 +168,13 @@ defmodule Astarte.Export do
   end
 
   defp get_attributes(:item, value) do
-    %{:name => value[:v_realpathdatavalue]}
+    %{name: value.path}
   end
 
   defp get_attributes(_tag, _value) do
     %{}
   end
 
-  ###############################################################
-  #
-  # get_value/2 function is used to construct the Inner XML tag
-  # (or) data field to be used b/w opening and closing tags
-  #
-  ###############################################################
 
   @spec get_value(atom(), struct() | keyword()) ::
           String.t()
@@ -203,13 +185,13 @@ defmodule Astarte.Export do
     tag_list = [:protocol, :registration, :credentials, :stats, :interfaces]
 
     Enum.reduce(tag_list, [], fn tag, acc ->
-      acc ++ [seralize_xml(tag, state)]
+      acc ++ [serialize_xml(tag, state)]
     end)
   end
 
   defp get_value(:interfaces, state) do
     Enum.reduce(state.interfaces, [], fn interface_state, acc ->
-      acc ++ [seralize_xml(:interface, interface_state)]
+      acc ++ [serialize_xml(:interface, interface_state)]
     end)
   end
 
@@ -220,13 +202,13 @@ defmodule Astarte.Export do
     Enum.reduce(mappings, [], fn mapping, acc ->
       case interface_type do
         {:datastream, :individual} ->
-          acc ++ [seralize_xml(:datastream, mapping)]
+          acc ++ [serialize_xml(:datastream, mapping)]
 
         {:datastream, :object} ->
-          acc ++ [seralize_xml(:datastream, mapping)]
+          acc ++ [serialize_xml(:datastream, mapping)]
 
         {:properties, _} ->
-          acc ++ [seralize_xml(:property, mapping)]
+          acc ++ [serialize_xml(:property, mapping)]
       end
     end)
   end
@@ -236,10 +218,10 @@ defmodule Astarte.Export do
       output =
         case mapping.type do
           {_, :object} ->
-            seralize_xml(:object, value)
+            serialize_xml(:object, value)
 
           {_, :individual} ->
-            seralize_xml(:value, value)
+            serialize_xml(:value, value)
         end
 
       acc ++ [output]
@@ -247,7 +229,7 @@ defmodule Astarte.Export do
   end
 
   defp get_value(:object, value) do
-    [seralize_xml(:item, value)]
+    [serialize_xml(:item, value)]
   end
 
   defp get_value(:property, value) do
@@ -283,11 +265,11 @@ defmodule Astarte.Export do
     |> XmlBuilder.generate()
   end
 
-  defp astrate_default_open_tags do
-    "<astrate>\n<devices>\n"
+  defp astarte_default_open_tags do
+    "<astarte>\n<devices>\n"
   end
 
-  defp astrate_default_close_tags do
-    "</devices>\n</astrate>"
+  defp astarte_default_close_tags do
+    "</devices>\n</astarte>"
   end
 end
