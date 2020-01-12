@@ -47,13 +47,14 @@ defmodule Astarte.Export do
     end
   end
 
-  def generate_xml(realm, file) do
+  defp generate_xml(realm, file) do
     Logger.info("Export started .", realm: realm, tag: "export_started")
+
     with {:ok, file_descriptor} = File.open(file, [:write]),
          start_tags = astarte_default_open_tags,
          :ok <- IO.puts(file_descriptor, start_tags),
          {:ok, :finished} <- generate_xml_1(realm, file_descriptor, []) do
-         File.close(file_descriptor)
+      File.close(file_descriptor)
     else
       {:error, reason} ->
         {:error, reason}
@@ -71,13 +72,13 @@ defmodule Astarte.Export do
         IO.puts(file_descriptor, tags)
         Logger.info("Export Completed.", realm: realm, tag: "export_completed")
         {:ok, :finished}
-      
+
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  def serialize_to_xml(device_data) do
+  defp serialize_to_xml(device_data) do
     xml_data =
       serialize_xml(:device, device_data)
       |> XmlBuilder.generate()
@@ -226,11 +227,11 @@ defmodule Astarte.Export do
   defp get_value(:item, state) do
     state.value |> Kernel.to_string()
   end
-  
+
   defp get_value(:value, state) do
     state.value |> Kernel.to_string()
   end
-  
+
   defp get_value(tag, _values) do
     ""
   end
@@ -257,7 +258,7 @@ defmodule Astarte.Export do
   end
 
   defp astarte_default_open_tags do
-    "<astarte>\n<devices>\n"
+    "<astarte>\n<devices>"
   end
 
   defp astarte_default_close_tags do

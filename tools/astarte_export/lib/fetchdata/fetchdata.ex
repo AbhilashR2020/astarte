@@ -219,6 +219,7 @@ defmodule Astarte.Export.FetchData do
       case values do
         [] ->
           acc1
+
         _ ->
           [%{path: path, aggregation: :individual, value: values} | acc1]
       end
@@ -251,19 +252,19 @@ defmodule Astarte.Export.FetchData do
           |> DateTime.to_iso8601()
 
         list = Map.to_list(map)
-        
+
         value_list =
           List.foldl(list, [], fn {key, value}, acc1 ->
-           with "v_" <> item <- to_string(key),
-             match_object when match_object != nil 
-              <- Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end),
-             data_type = match_object[:data_type],
-             token = "/" <> match_object[:suffix_path],
-             value1 when value1 != "" <- from_native_type(value, data_type) do
-               [%{name: token, value: value1} | acc1]
-           else
-              _ ->  acc1
-           end 
+            with "v_" <> item <- to_string(key),
+                 match_object when match_object != nil <-
+                   Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end),
+                 data_type = match_object[:data_type],
+                 token = "/" <> match_object[:suffix_path],
+                 value1 when value1 != "" <- from_native_type(value, data_type) do
+              [%{name: token, value: value1} | acc1]
+            else
+              _ -> acc1
+            end
           end)
 
         case acc == %{} do

@@ -16,7 +16,7 @@ defmodule Astarte.Export.FetchData.Queries do
     else
       {:error, reason} ->
         Logger.error("DB connection setup failed: #{inspect(reason)}", tag: "db_connection_failed")
-    end 
+    end
   end
 
   def retrieve_interface_row(conn, realm, interface, major_version) do
@@ -43,7 +43,10 @@ defmodule Astarte.Export.FetchData.Queries do
         {:error, :database_error}
 
       {:error, %Xandra.ConnectionError{} = err} ->
-        Logger.error("database connection error:#{inspect(err)}.", tag: "database_connection_error")
+        Logger.error("database connection error:#{inspect(err)}.",
+          tag: "database_connection_error"
+        )
+
         {:error, :database_connection_error}
     end
   end
