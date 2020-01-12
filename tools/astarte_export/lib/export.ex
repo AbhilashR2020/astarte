@@ -48,7 +48,7 @@ defmodule Astarte.Export do
   end
 
   def generate_xml(realm, file) do
-    Logger.info("Export started.", realm: realm)
+    Logger.info("Export started .", realm: realm, tag: "export_started")
     with {:ok, file_descriptor} = File.open(file, [:write]),
          start_tags = astarte_default_open_tags,
          :ok <- IO.puts(file_descriptor, start_tags),
@@ -69,7 +69,7 @@ defmodule Astarte.Export do
       {:ok, :completed} ->
         tags = astarte_default_close_tags()
         IO.puts(file_descriptor, tags)
-        Logger.info("Export Completed.", realm: realm)
+        Logger.info("Export Completed.", realm: realm, tag: "export_completed")
         {:ok, :finished}
       
       {:error, reason} ->

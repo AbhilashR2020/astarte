@@ -23,12 +23,10 @@ defmodule AstarteExport.MixProject do
   [
       {:xml_builder, git: "https://github.com/joshnuss/xml_builder.git" },
       {:xandra, "~> 0.10"},
-      {:logfmt, "~> 3.3"},
       {:astarte_core, github: "astarte-platform/astarte_core"},
       {:astarte_data_access, github: "astarte-platform/astarte_data_access"},
-      {:distillery, "~> 2.0.0"}
-
-      
-    ]
+      {:distillery, "~> 2.0.0"},
+      {:pretty_log, github: "ispirata/pretty_log"}
+  ]
   end
 end

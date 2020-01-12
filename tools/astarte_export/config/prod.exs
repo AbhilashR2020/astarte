@@ -4,8 +4,11 @@ config :xandra,
   cassandra_nodes: [{System.get_env("CASSANDRA_DB_HOST"), System.get_env("CASSANDRA_DB_PORT")}]
 
 config :logger, :console,
-  format: {Astarte.Export.LogFmtFormatter, :format},
-  metadata: [:module, :function, :device_id, :realm]
+  format: {PrettyLog.LogfmtFormatter, :format}, 
+  metadata: [:module, :function, :device_id, :realm, interface_id, :reason, :tag]
 
-config :logfmt,
-  prepend_metadata: [:application, :module, :function, :realm, :device_id]
+config :logger,
+  compile_time_purge_matching: [
+    [level_lower_than: :info]
+  ]
+
