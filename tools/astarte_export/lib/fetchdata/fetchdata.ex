@@ -1,10 +1,5 @@
 defmodule Astarte.Export.FetchData do
   alias Astarte.Core.Device
-  alias Astarte.Core.Mapping
-  alias Astarte.Core.Mapping.EndpointsAutomaton
-  alias Astarte.DataAccess.Database
-  alias Astarte.DataAccess.Interface
-  alias Astarte.DataAccess.Mappings
   alias Astarte.Export.FetchData.Queries
 
   defmodule DeviceData do
@@ -39,14 +34,11 @@ defmodule Astarte.Export.FetchData do
   def fetch_device_data(realm, opts) do
     with {conn, opts1} = Keyword.pop(opts, :conn),
          {:ok, page} <- Queries.stream_devices(conn, realm, opts1),
-         device_list = page |> Enum.to_list(),
-         false <- islist_empty(device_list),
-         device_data = hd(device_list),
+         [device_data| _tail] <- Enum.to_list(page),
          {:ok, state} <- process_device_data(conn, realm, device_data) do
-      Keyword.put(opts, :paging_state, page.paging_state)
       {:more_data, state, [conn: conn, paging_state: page.paging_state, page_size: 1]}
     else
-      true -> {:ok, :completed}
+      [] -> {:ok, :completed}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -146,8 +138,6 @@ defmodule Astarte.Export.FetchData do
       {:ok, interface_description} =
         Queries.fetch_interface_descriptor(conn, realm, interface_name, major_version)
 
-      minor_version = interface_description.minor_version |> to_string()
-      major_version1 = major_version |> Kernel.to_string()
       interface_id = interface_description.interface_id
       aggregation = interface_description.aggregation
       storage = interface_description.storage
@@ -172,8 +162,8 @@ defmodule Astarte.Export.FetchData do
       [
         %{
           interface_name: interface_name,
-          major_version: major_version1,
-          minor_version: minor_version,
+          major_version: to_string(major_version),
+          minor_version: to_string(interface_description.minor_version),
           active: "true",
           interface_type: {interface_type, aggregation},
           mappings: mapped_data_fields
@@ -380,7 +370,4 @@ defmodule Astarte.Export.FetchData do
 
     {:ok, obj}
   end
-
-  defp islist_empty([]), do: true
-  defp islist_empty(_), do: false
 end
