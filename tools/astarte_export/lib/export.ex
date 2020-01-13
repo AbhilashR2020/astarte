@@ -221,15 +221,15 @@ defmodule Astarte.Export do
   end
 
   defp get_value(:property, state) do
-    state.value |> Kernel.to_string()
+    to_string(state.value) 
   end
 
   defp get_value(:item, state) do
-    state.value |> Kernel.to_string()
+    to_string(state.value)
   end
 
   defp get_value(:value, state) do
-    state.value |> Kernel.to_string()
+    to_string(state.value)
   end
 
   defp get_value(tag, _values) do
