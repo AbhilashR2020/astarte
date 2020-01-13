@@ -46,63 +46,53 @@ defmodule Astarte.Export.FetchData do
   @spec process_device_data(identifier(), String.t(), list()) :: struct()
 
   def process_device_data(conn, realm, device_data) do
-    device_id =
-      device_data[:device_id]
-      |> Device.encode_device_id()
-
-    revision = device_data[:protocol_revision]
+    device_id = Device.encode_device_id(device_data.device_id)
+    revision = device_data.protocol_revision
 
     pending_empty_cache =
-      device_data[:pending_empty_cache]
+      device_data.pending_empty_cache
       |> to_string
       |> String.downcase()
 
-    secret_bcrypt_hash = device_data[:credentials_secret]
-
+    secret_bcrypt_hash = device_data.credentials_secret
     first_registration =
-      device_data[:first_registration]
+      device_data.first_registration
       |> DateTime.from_unix!(:millisecond)
       |> DateTime.to_iso8601()
 
     inhibit_request =
-      device_data[:inhibit_credentials_request]
+      device_data.inhibit_credentials_request
       |> to_string
       |> String.downcase()
 
-    cert_serial = device_data[:cert_serial]
-
-    cert_aki = device_data[:cert_aki]
+    cert_serial = device_data.cert_serial
+    cert_aki = device_data.cert_aki
 
     first_credentials_request =
-      device_data[:first_credentials_request]
+      device_data.first_credentials_request
       |> DateTime.from_unix!(:millisecond)
       |> DateTime.to_iso8601()
 
     last_credentials_request_ip =
-      device_data[:last_credentials_request_ip]
+      device_data.last_credentials_request_ip
       |> :inet_parse.ntoa()
       |> to_string()
 
-    total_received_msgs =
-      device_data[:total_received_msgs]
-      |> to_string()
-
-    total_received_bytes =
-      device_data[:total_received_bytes]
-      |> to_string()
+    total_received_msgs = to_string(device_data.total_received_msgs)
+    total_received_bytes = to_string(device_data.total_received_bytes)
 
     last_connection =
-      device_data[:last_connection]
+      device_data.last_connection
       |> DateTime.from_unix!(:millisecond)
       |> DateTime.to_iso8601()
 
     last_disconnection =
-      device_data[:last_disconnection]
+      device_data.last_disconnection
       |> DateTime.from_unix!(:millisecond)
       |> DateTime.to_iso8601()
 
     last_seen_ip =
-      device_data[:last_seen_ip]
+      device_data.last_seen_ip
       |> :inet_parse.ntoa()
       |> to_string()
 
