@@ -53,7 +53,7 @@ defmodule Astarte.Export do
     with {:ok, file_descriptor} = File.open(file, [:write]),
          start_tags = astarte_default_open_tags,
          :ok <- IO.puts(file_descriptor, start_tags),
-         {:ok, :finished} <- generate_xml_1(realm, file_descriptor, []) do
+         {:ok, :finished} <- generate_xml(realm, file_descriptor, []) do
       File.close(file_descriptor)
     else
       {:error, reason} ->
@@ -61,11 +61,11 @@ defmodule Astarte.Export do
     end
   end
 
-  defp generate_xml_1(realm, file_descriptor, opts) do
+  defp generate_xml(realm, file_descriptor, opts) do
     with {:more_data, device_data, updated_options} <- FetchData.fetch_device_data(realm, opts),
          {:ok, xml_data} <- serialize_to_xml(device_data),
          :ok <- IO.puts(file_descriptor, xml_data) do
-      generate_xml_1(realm, file_descriptor, updated_options)
+      generate_xml(realm, file_descriptor, updated_options)
     else
       {:ok, :completed} ->
         tags = astarte_default_close_tags()
