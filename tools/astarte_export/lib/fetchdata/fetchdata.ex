@@ -1,5 +1,6 @@
 defmodule Astarte.Export.FetchData do
   alias Astarte.Core.Device
+  alias Astarte.Core.CQLUtils
   alias Astarte.Export.FetchData.Queries
 
   defmodule DeviceData do
@@ -168,7 +169,7 @@ defmodule Astarte.Export.FetchData do
       endpoint_id = mapping.endpoint_id
       path = mapping.endpoint
       data_type = mapping.value_type
-      data_field = get_data_field_name(data_type)
+      data_field = CQLUtils.type_to_db_column_name(data_type)
 
       {:ok, result} =
         Queries.retrieve_individual_datastreams(
@@ -273,7 +274,7 @@ defmodule Astarte.Export.FetchData do
       endpoint_id = mapping.endpoint_id
       path = mapping.endpoint
       data_type = mapping.value_type
-      data_field = get_data_field_name(data_type)
+      data_field = CQLUtils.type_to_db_column_name(data_type)
 
       {:ok, result} =
         Queries.retrieve_individual_properties(conn, realm, device_id, interface_id, data_field)
@@ -295,25 +296,6 @@ defmodule Astarte.Export.FetchData do
           %{reception_timestamp: reception_timestamp, path: path, value: value}
         end)
     end)
-  end
-
-  def get_data_field_name(data_type) when is_atom(data_type) do
-    case data_type do
-      :double -> "double_value"
-      :integer -> "integer_value"
-      :boolean -> "boolean_value"
-      :longinteger -> "longinteger_value"
-      :string -> "string_value"
-      :binaryblob -> "binaryblob_value"
-      :datetime -> "datetime_value"
-      :doublearray -> "doublearray_value"
-      :integerarray -> "integerarray_value"
-      :booleanarray -> "booleanarray_value"
-      :longintegerarray -> "longintegerarray_value"
-      :stringarray -> "stringarray_value"
-      :binaryblobarray -> "binaryblobarray_value"
-      :datetimearray -> "datetimearray_value"
-    end
   end
 
   defp from_native_type(value_chars, :double) do
