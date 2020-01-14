@@ -16,6 +16,7 @@ ex(astarte_export@127.0.0.1)2> Astarte.Export.export_realm_data("test", "/home/h
 :ok
 iex(astarte_export@127.0.0.1)3>
 ```
+The exported realm data is captured in xml_format as below.
 
 ```xml
 <astarte>
