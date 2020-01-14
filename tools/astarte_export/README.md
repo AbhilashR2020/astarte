@@ -7,14 +7,13 @@ Astarte Export is an easy to use tool that allows to exporting all the devices a
 
 
 ```iex
-ex(astarte_export@127.0.0.1)2> Astarte.Export.export_realm_data("test", "/home/harika/MyApplication/final_package/astarte_export-master/_build/dev/rel/astarte_export")
-8:45:23.131     |INFO | Export started.                                         | module=Elixir.Astarte.Export function=generate_xml/2 realm=test
-8:45:23.146     |INFO | Connected to database.                                  | module=Elixir.Astarte.Export function=get_value/2 realm=test 
-8:45:23.236     |INFO | Extracted devices information from realm                | module=Elixir.Astarte.Export function=get_value/2 realm=test 
-8:45:23.489     |INFO | XML Seralization completed                              | module=Elixir.Astarte.Export function=generate_xml/2 realm=test
-8:45:23.490     |INFO | Export completed into file: /home/harika/MyApplication/final_package/astarte_export-master/_build/dev/rel/astarte_export/test_2019_12_30_8_45_23.xml    | module=Elixir.Astarte.Export function=generate_xml/2 realm=test
+iex(astarte_export@127.0.0.1)5> Astarte.Export.export_realm_data("test", "/home/harika/MyApplication/GITHUB1/astarte/tools/astarte_export/")
+level=info ts=2020-01-14T08:11:12.880+05:30 msg="Export started ." module=Astarte.Export function=generate_xml/2 realm=test tag=export_started 
+level=info ts=2020-01-14T08:11:12.881+05:30 msg="Connecting to \"172.18.0.2\":\"9042\" cassandra database." module=Astarte.Export.FetchData.Queries function=get_connection/0
+level=info ts=2020-01-14T08:11:12.882+05:30 msg="Connected to database." module=Astarte.Export.FetchData.Queries function=get_connection/0
+level=info ts=2020-01-14T08:11:13.115+05:30 msg="Export Completed." module=Astarte.Export function=generate_xml/3 realm=test tag=export_completed
 :ok
-iex(astarte_export@127.0.0.1)3>
+iex(astarte_export@127.0.0.1)6>
 ```
 The exported realm data is captured in xml_format as below.
 
