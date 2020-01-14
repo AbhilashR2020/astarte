@@ -88,7 +88,7 @@ defmodule Astarte.Export do
 
   @spec serialize_xml(atom(), struct() | keyword()) :: {atom(), map(), String.t() | keyword()}
 
-  def serialize_xml(tag, options) do
+  defp serialize_xml(tag, options) do
     {tag, get_attributes(tag, options), get_value(tag, options)}
   end
 
@@ -236,7 +236,7 @@ defmodule Astarte.Export do
     ""
   end
 
-  def format_time() do
+  defp format_time() do
     {{year, month, date}, {hour, minute, second}} = :calendar.local_time()
 
     to_string(year) <>
