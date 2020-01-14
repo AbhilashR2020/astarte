@@ -154,7 +154,7 @@ defmodule Astarte.Export do
   end
 
   defp get_attributes(:value, state) do
-    %{:reception_timestamp => state[:reception_timestamp]}
+    %{reception_timestamp: state.reception_timestamp}
   end
 
   defp get_attributes(:item, value) do
@@ -221,7 +221,7 @@ defmodule Astarte.Export do
   end
 
   defp get_value(:property, state) do
-    to_string(state.value) 
+    to_string(state.value)
   end
 
   defp get_value(:item, state) do

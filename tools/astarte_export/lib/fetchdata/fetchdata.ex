@@ -35,7 +35,7 @@ defmodule Astarte.Export.FetchData do
   def fetch_device_data(realm, opts) do
     with {conn, opts1} = Keyword.pop(opts, :conn),
          {:ok, page} <- Queries.stream_devices(conn, realm, opts1),
-         [device_data| _tail] <- Enum.to_list(page),
+         [device_data | _tail] <- Enum.to_list(page),
          {:ok, state} <- process_device_data(conn, realm, device_data) do
       {:more_data, state, [conn: conn, paging_state: page.paging_state, page_size: 1]}
     else
@@ -56,6 +56,7 @@ defmodule Astarte.Export.FetchData do
       |> String.downcase()
 
     secret_bcrypt_hash = device_data.credentials_secret
+
     first_registration =
       device_data.first_registration
       |> DateTime.from_unix!(:millisecond)
