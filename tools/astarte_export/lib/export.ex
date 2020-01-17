@@ -51,9 +51,13 @@ defmodule Astarte.Export do
     Logger.info("Export started .", realm: realm, tag: "export_started")
 
     with {:ok, file_descriptor} = File.open(file, [:write]),
-         start_tags = astarte_default_open_tags,
-         :ok <- IO.puts(file_descriptor, start_tags),
-         {:ok, :finished} <- generate_xml(realm, file_descriptor, []) do
+         {:ok, doc, state} <- XMLStreamWriter.new_document(),
+         {:ok, header, state} <- XMLStreamWriter.start_document(state),
+         {:ok, astarte_tag, state} <- XMLStreamWriter.start_element(state, "astarte", []),
+         {:ok, devices_tag, state} <- XMLStreamWriter.start_element(state, "devices", []),
+         xml_data <- :erlang.iolist_to_binary([doc, header, astrate_tag, devices_tag])
+         :ok <- IO.puts(file_descriptor, xml_data),
+         {:ok, :finished} <- generate_xml(realm, file_descriptor, [], state) do
       File.close(file_descriptor)
     else
       {:error, reason} ->
@@ -61,11 +65,32 @@ defmodule Astarte.Export do
     end
   end
 
-  defp generate_xml(realm, file_descriptor, opts) do
-    with {:more_data, device_data, updated_options} <- FetchData.fetch_device_data(realm, opts),
-         {:ok, xml_data} <- serialize_to_xml(device_data),
-         :ok <- IO.puts(file_descriptor, xml_data) do
-      generate_xml(realm, file_descriptor, updated_options)
+
+  defp generate_xml(realm, file_descriptor, opts, state) do
+    with {:more_data, device_data, updated_options} <- FetchData.fetch_device_data(realm, opts) do
+      mapped_device_data = FetchData.process_device_data(device_data)
+      {:ok, xml_data, state} = construct_device_xml_tags(mapped_device_data,state) 
+      {:ok, mapped_interfaces} = gen_interface_details(conn, realm, device_data)
+      {:ok, interfaces_tag, state} = XMLStreamWriter.start_element(state, "interfaces", [])
+      Enum.reduce(mapped_interfaces, state, fn interface_details, state ->
+        %{interface: interface_attributes,
+          interface_id: interface_id,
+          aggregation: aggregation,
+          storage: storage,
+          interface_type: interface_type,
+          mappings: mappings} = interface_details,
+          {:ok, interface_tag, state} = XMLStreamWriter.start_element(state, "interface", interface_attributes)
+          case interface_type do
+            :datastream ->
+               case aggregation do
+                 :object ->
+                    fetch_object_datastreams(conn, realm, mappings, device_id, storage)
+                 :individual ->
+                    fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id)
+               end
+            :properties ->
+              fetch_individual_properties(conn, realm, mappings, device_id, interface_id)
+          end
     else
       {:ok, :completed} ->
         tags = astarte_default_close_tags()
@@ -73,195 +98,51 @@ defmodule Astarte.Export do
         Logger.info("Export Completed.", realm: realm, tag: "export_completed")
         {:ok, :finished}
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+  
+ 
+  def construct_device_xml_tags(device_data, state) do
+    %{device: device,
+      protocol: protocol,
+      registration: registration,
+      credentials: credentials,
+      stats: stats} = device_data
+    {:ok, device_tag, state} = XMLStreamWriter.start_element(state, "device", device)
+    {:ok, protocol_tag, state} = XMLStreamWriter.empty_element(state, "protocol", protocol)
+    {:ok, registration_tag, state} = XMLStreamWriter.empty_element(state, "registration", registration) 
+    {:ok, credentials_tag, state} = XMLStreamWriter.empty_element(state, "credentials", credentials)
+    {:ok, stats_tag, state} = XMLStreamWriter.empty_element(state, "stats", stats)
+    xml_data <- :erlang.iolist_to_binary([device_tag, protocol_tag, registration_tag, credentials_tag, stats_tag]) 
+    {:ok, xml_data, state} 
+  end
+
+  defp fetch_object_datastreams(conn, realm, mappings, device_id, storage, ) do
+    with 
+      {:more_data, mapped_object, updated_options} 
+       <- FetchData.fetch_object_datastreams(conn, realm, mappings, device_id, storage, options) do
+         
+    else
+         
     end
   end
 
-  defp serialize_to_xml(device_data) do
-    xml_data =
-      serialize_xml(:device, device_data)
-      |> XmlBuilder.generate()
+  defp fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id,[]) do
+    with 
+      {:more_data, mapped_object, updated_options} <-
+          FetchData.fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id, options) do
+    else
 
-    {:ok, xml_data}
+    end
   end
 
-  @spec serialize_xml(atom(), struct() | keyword()) :: {atom(), map(), String.t() | keyword()}
+  defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id,[]) do
+    with 
+      {:more_data, mapped_object, updated_options} <-
+          FetchData.fetch_individual_properties(conn, realm, mappings, device_id, interface_id, options) do
+    else
 
-  defp serialize_xml(tag, options) do
-    {tag, get_attributes(tag, options), get_value(tag, options)}
-  end
-
-  @spec get_attributes(atom(), struct() | keyword()) :: map()
-
-  defp get_attributes(:device, state) do
-    %{device_id: state.device_id}
-  end
-
-  defp get_attributes(:protocol, state) do
-    %{revision: state.revision, pending_empty_cache: state.pending_empty_cache}
-  end
-
-  defp get_attributes(:registration, state) do
-    %{
-      secret_bcrypt_hash: state.secret_bcrypt_hash,
-      first_registration: state.first_registration
-    }
-  end
-
-  defp get_attributes(:credentials, state) do
-    %{
-      inhibit_request: state.inhibit_request,
-      cert_serial: state.cert_serial,
-      cert_aki: state.cert_aki,
-      first_credentials_request: state.first_credentials_request
-    }
-  end
-
-  defp get_attributes(:stats, state) do
-    %{
-      total_received_msgs: state.total_received_msgs,
-      total_received_bytes: state.total_received_bytes,
-      last_connection: state.last_connection,
-      last_disconnection: state.last_disconnection,
-      last_seen_ip: state.last_seen_ip
-    }
-  end
-
-  defp get_attributes(:interfaces, state) do
-    %{}
-  end
-
-  defp get_attributes(:interface, state) do
-    %{
-      name: state.interface_name,
-      major_version: state.major_version,
-      minor_version: state.minor_version,
-      active: state.active
-    }
-  end
-
-  defp get_attributes(:datastream, {_type, state}) do
-    %{path: state.path}
-  end
-
-  defp get_attributes(:property, state) do
-    %{path: state.path, reception_timestamp: state.reception_timestamp}
-  end
-
-  defp get_attributes(:object, state) do
-    %{reception_timestamp: state.reception_timestamp}
-  end
-
-  defp get_attributes(:value, state) do
-    %{reception_timestamp: state.reception_timestamp}
-  end
-
-  defp get_attributes(:item, value) do
-    %{name: value.name}
-  end
-
-  defp get_attributes(_tag, _value) do
-    %{}
-  end
-
-  @spec get_value(atom(), struct() | keyword()) ::
-          String.t()
-          | charlist()
-          | maybe_improper_list()
-
-  defp get_value(:device, state) do
-    tag_list = [:protocol, :registration, :credentials, :stats, :interfaces]
-
-    Enum.reduce(tag_list, [], fn tag, acc ->
-      acc ++ [serialize_xml(tag, state)]
-    end)
-  end
-
-  defp get_value(:interfaces, state) do
-    Enum.reduce(state.interfaces, [], fn interface_state, acc ->
-      acc ++ [serialize_xml(:interface, interface_state)]
-    end)
-  end
-
-  defp get_value(:interface, state) do
-    mappings = state.mappings
-    interface_type = state.interface_type
-
-    Enum.reduce(mappings, [], fn mapping, acc ->
-      case interface_type do
-        {:datastream, _} ->
-          acc ++ [serialize_xml(:datastream, mapping)]
-
-        {:properties, _} ->
-          acc ++ [serialize_xml(:property, mapping)]
-      end
-    end)
-  end
-
-  defp get_value(:datastream, mapping) do
-    Enum.reduce(mapping.value, [], fn value, acc ->
-      output =
-        case mapping.aggregation do
-          :object ->
-            serialize_xml(:object, value)
-
-          :individual ->
-            serialize_xml(:value, value)
-        end
-
-      acc ++ [output]
-    end)
-  end
-
-  defp get_value(:object, state) do
-    Enum.reduce(state.value, [], fn value, acc ->
-      [serialize_xml(:item, value) | acc]
-    end)
-  end
-
-  defp get_value(:property, state) do
-    to_string(state.value)
-  end
-
-  defp get_value(:item, state) do
-    to_string(state.value)
-  end
-
-  defp get_value(:value, state) do
-    to_string(state.value)
-  end
-
-  defp get_value(tag, _values) do
-    ""
-  end
-
-  defp format_time() do
-    {{year, month, date}, {hour, minute, second}} = :calendar.local_time()
-
-    to_string(year) <>
-      "_" <>
-      to_string(month) <>
-      "_" <>
-      to_string(date) <>
-      "_" <>
-      to_string(hour) <>
-      "_" <>
-      to_string(minute) <>
-      "_" <>
-      to_string(second)
-  end
-
-  defp default_xml_header() do
-    XmlBuilder.document("")
-    |> XmlBuilder.generate()
-  end
-
-  defp astarte_default_open_tags do
-    "<astarte>\n<devices>"
-  end
-
-  defp astarte_default_close_tags do
-    "</devices>\n</astarte>"
-  end
+    end
+  end  
 end

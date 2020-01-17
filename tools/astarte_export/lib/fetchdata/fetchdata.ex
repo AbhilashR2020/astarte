@@ -3,26 +3,6 @@ defmodule Astarte.Export.FetchData do
   alias Astarte.Core.CQLUtils
   alias Astarte.Export.FetchData.Queries
 
-  defmodule DeviceData do
-    defstruct [
-      :device_id,
-      :revision,
-      :pending_empty_cache,
-      :secret_bcrypt_hash,
-      :first_registration,
-      :inhibit_request,
-      :cert_aki,
-      :cert_serial,
-      :first_credentials_request,
-      :last_credentials_request_ip,
-      :total_received_msgs,
-      :total_received_bytes,
-      :last_connection,
-      :last_disconnection,
-      :last_seen_ip,
-      :interfaces
-    ]
-  end
 
   def fetch_device_data(realm, []) do
     with {:ok, conn_ref} <- Queries.get_connection() do
@@ -45,8 +25,8 @@ defmodule Astarte.Export.FetchData do
   end
 
   @spec process_device_data(identifier(), String.t(), list()) :: struct()
-
-  def process_device_data(conn, realm, device_data) do
+  
+  def process_device_data(device_data) do
     device_id = Device.encode_device_id(device_data.device_id)
     revision = device_data.protocol_revision
 
@@ -97,35 +77,38 @@ defmodule Astarte.Export.FetchData do
       device_data.last_seen_ip
       |> :inet_parse.ntoa()
       |> to_string()
+   
+    device_attributes   = [device_id: device_id]
+    
+    protocol_attributes = [revision: revision]
 
-    interface_details = gen_interface_details(conn, realm, device_data)
+    registration_attributes = [secret_bcrypt_hash: secret_bcrypt_hash,
+                               first_registration: first_registration]
 
-    {:ok,
-     %DeviceData{
-       device_id: device_id,
-       revision: revision,
-       pending_empty_cache: pending_empty_cache,
-       secret_bcrypt_hash: secret_bcrypt_hash,
-       first_registration: first_registration,
-       inhibit_request: inhibit_request,
-       cert_aki: cert_aki,
-       cert_serial: cert_serial,
-       first_credentials_request: first_credentials_request,
-       last_credentials_request_ip: last_credentials_request_ip,
-       total_received_msgs: total_received_msgs,
-       total_received_bytes: total_received_bytes,
-       last_connection: last_connection,
-       last_disconnection: last_disconnection,
-       last_seen_ip: last_seen_ip,
-       interfaces: interface_details
-     }}
-  end
+    credentials_attributes = [inhibit_request: inhibit_request,
+                              cert_serial: cert_serial,
+                              cert_aki: cert_aki,
+                              first_credentials_request: first_credentials_request,
+                              last_credentials_request_ip: last_credentials_request_ip]
 
-  defp gen_interface_details(conn, realm, device_data) do
-    device_id = device_data[:device_id]
-    introspection = device_data[:introspection]
-    introspection_minor = device_data[:interospection_minor]
-
+    stats_attributes = [total_received_msgs: total_received_msgs,
+                       total_received_bytes: total_received_bytes,
+                       last_connection: last_connection,
+                       last_disconnection: last_disconnection,
+                       last_seen_ip: last_seen_ip]
+    
+    %{device: device_attributes,
+      protocol: protocol_attributes,
+      registration: registration_attributes,
+      credentials: credentials_attributes,
+      stats: stats_attribtes}
+  end   
+   
+  def get_interface_details(conn, realm, device_data) do
+    device_id = device_data.device_id
+    introspection = device_data.introspection
+    introspection_minor = device_data.interospection_minor
+    mapped_interfaces = 
     Enum.reduce(introspection, [], fn {interface_name, major_version}, acc ->
       {:ok, interface_description} =
         Queries.fetch_interface_descriptor(conn, realm, interface_name, major_version)
@@ -135,7 +118,22 @@ defmodule Astarte.Export.FetchData do
       storage = interface_description.storage
       interface_type = interface_description.type
       {:ok, mappings} = Queries.fetch_interface_mappings(conn, realm, interface_id)
+     
+      interface_attributes = [interface_name: interface_name,
+                              major_version: major_version,
+                              minor_version: minor_version,
+                              active: "true"]
+      [#{interface: interface_attributes,
+         interface_id: interface_id,
+         aggregation: aggregation,
+         storage: storage,
+         interface_type: interface_type,
+         mappings: mappings} | acc]
+    end
+    {:ok, mapped_interfaces} 
+  end
 
+      
       mapped_data_fields =
         case interface_type do
           :datastream ->
@@ -165,7 +163,7 @@ defmodule Astarte.Export.FetchData do
     end)
   end
 
-  def fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id) do
+  def fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id, options) do
     Enum.reduce(mappings, [], fn mapping, acc1 ->
       endpoint_id = mapping.endpoint_id
       path = mapping.endpoint
@@ -180,7 +178,8 @@ defmodule Astarte.Export.FetchData do
           interface_id,
           endpoint_id,
           path,
-          data_field
+          data_field,
+          options
         )
 
       values =
