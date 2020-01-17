@@ -4,27 +4,29 @@ defmodule Astarte.Export.FetchData do
   alias Astarte.Export.FetchData.Queries
 
 
-  def fetch_device_data(realm, []) do
+  def db_connection_identifier() do
     with {:ok, conn_ref} <- Queries.get_connection() do
-      fetch_device_data(realm, conn: conn_ref, page_size: 1)
+        {:ok, conn_ref}
     else
       _ -> {:error, :connection_setup_failed}
     end
   end
-
-  def fetch_device_data(realm, opts) do
-    with {conn, opts1} = Keyword.pop(opts, :conn),
-         {:ok, page} <- Queries.stream_devices(conn, realm, opts1),
-         [device_data | _tail] <- Enum.to_list(page),
-         {:ok, state} <- process_device_data(conn, realm, device_data) do
-      {:more_data, state, [conn: conn, paging_state: page.paging_state, page_size: 1]}
+  
+  
+  def fetch_device_data(conn, realm, []) do
+    fetch_device_data(conn, realm, [page_size: 1)
+  end
+     
+  def fetch_device_data(conn, realm, opts) do
+    with {:ok, page} <- Queries.stream_devices(conn, realm, opts),
+         [device_data | _tail] <- Enum.to_list(page) do
+      {:more_data, device_data, [paging_state: page.paging_state, page_size: 1]}
     else
       [] -> {:ok, :completed}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  @spec process_device_data(identifier(), String.t(), list()) :: struct()
   
   def process_device_data(device_data) do
     device_id = Device.encode_device_id(device_data.device_id)
@@ -111,60 +113,31 @@ defmodule Astarte.Export.FetchData do
     mapped_interfaces = 
     Enum.reduce(introspection, [], fn {interface_name, major_version}, acc ->
       {:ok, interface_description} =
-        Queries.fetch_interface_descriptor(conn, realm, interface_name, major_version)
+        Queries.fetch_interface_descriptor(conn, realm, interface_name, major_version,[])
 
       interface_id = interface_description.interface_id
       aggregation = interface_description.aggregation
       storage = interface_description.storage
       interface_type = interface_description.type
-      {:ok, mappings} = Queries.fetch_interface_mappings(conn, realm, interface_id)
+      {:ok, mappings} = Queries.fetch_interface_mappings(conn, realm, interface_id,[])
      
       interface_attributes = [interface_name: interface_name,
                               major_version: major_version,
                               minor_version: minor_version,
                               active: "true"]
-      [#{interface: interface_attributes,
+      [%{interface: interface_attributes,
          interface_id: interface_id,
+		 device_id: device_id,
          aggregation: aggregation,
          storage: storage,
          interface_type: interface_type,
          mappings: mappings} | acc]
-    end
+    end)
     {:ok, mapped_interfaces} 
   end
 
-      
-      mapped_data_fields =
-        case interface_type do
-          :datastream ->
-            case aggregation do
-              :object ->
-                fetch_object_datastreams(conn, realm, mappings, device_id, storage)
 
-              :individual ->
-                fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id)
-            end
-
-          :properties ->
-            fetch_individual_properties(conn, realm, mappings, device_id, interface_id)
-        end
-
-      [
-        %{
-          interface_name: interface_name,
-          major_version: to_string(major_version),
-          minor_version: to_string(interface_description.minor_version),
-          active: "true",
-          interface_type: {interface_type, aggregation},
-          mappings: mapped_data_fields
-        }
-        | acc
-      ]
-    end)
-  end
-
-  def fetch_individual_datastreams(conn, realm, mappings, device_id, interface_id, options) do
-    Enum.reduce(mappings, [], fn mapping, acc1 ->
+  def fetch_individual_datastreams(conn, realm, mapping, device_id, interface_id, options) do
       endpoint_id = mapping.endpoint_id
       path = mapping.endpoint
       data_type = mapping.value_type
@@ -207,7 +180,7 @@ defmodule Astarte.Export.FetchData do
     end)
   end
 
-  def fetch_object_datastreams(conn, realm, [h | _] = mappings, device_id, storage) do
+  def fetch_object_datastreams(conn, realm, [h | _] = mappings, device_id, storage, options) do
     fullpath = h.endpoint
     [_, endpointprefix, _] = String.split(fullpath, "/")
     path = "/" <> endpointprefix
@@ -221,7 +194,7 @@ defmodule Astarte.Export.FetchData do
       end)
 
     {:ok, result} =
-      Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path)
+      Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path, options)
 
     result1 = Enum.to_list(result)
 
@@ -269,7 +242,7 @@ defmodule Astarte.Export.FetchData do
     [value]
   end
 
-  defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id) do
+  defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id, options) do
     Enum.reduce(mappings, [], fn mapping, acc1 ->
       endpoint_id = mapping.endpoint_id
       path = mapping.endpoint
@@ -277,7 +250,7 @@ defmodule Astarte.Export.FetchData do
       data_field = CQLUtils.type_to_db_column_name(data_type)
 
       {:ok, result} =
-        Queries.retrieve_individual_properties(conn, realm, device_id, interface_id, data_field)
+        Queries.retrieve_individual_properties(conn, realm, device_id, interface_id, data_field, options)
 
       values =
         Enum.to_list(result)
