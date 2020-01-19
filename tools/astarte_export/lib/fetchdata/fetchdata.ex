@@ -14,7 +14,7 @@ defmodule Astarte.Export.FetchData do
   
   
   def fetch_device_data(conn, realm, []) do
-    fetch_device_data(conn, realm, [page_size: 1)
+    fetch_device_data(conn, realm, [page_size: 1])
   end
      
   def fetch_device_data(conn, realm, opts) do
@@ -99,22 +99,21 @@ defmodule Astarte.Export.FetchData do
                        last_disconnection: last_disconnection,
                        last_seen_ip: last_seen_ip]
     
-    %{device: device_attributes,
-      protocol: protocol_attributes,
-      registration: registration_attributes,
-      credentials: credentials_attributes,
-      stats: stats_attribtes}
+    %{ device: device_attributes,
+       protocol: protocol_attributes,
+       registration: registration_attributes,
+       credentials: credentials_attributes,
+       stats: stats_attributes }
   end   
    
   def get_interface_details(conn, realm, device_data) do
     device_id = device_data.device_id
     introspection = device_data.introspection
-    introspection_minor = device_data.interospection_minor
     mapped_interfaces = 
     Enum.reduce(introspection, [], fn {interface_name, major_version}, acc ->
       {:ok, interface_description} =
         Queries.fetch_interface_descriptor(conn, realm, interface_name, major_version,[])
-
+      minor_version = interface_description.minor_version
       interface_id = interface_description.interface_id
       aggregation = interface_description.aggregation
       storage = interface_description.storage
@@ -122,18 +121,18 @@ defmodule Astarte.Export.FetchData do
       {:ok, mappings} = Queries.fetch_interface_mappings(conn, realm, interface_id,[])
      
       interface_attributes = [interface_name: interface_name,
-                              major_version: major_version,
-                              minor_version: minor_version,
+                              major_version: to_string(major_version),
+                              minor_version: to_string(minor_version),
                               active: "true"]
       [%{interface: interface_attributes,
          interface_id: interface_id,
-		 device_id: device_id,
+	 device_id: device_id,
          aggregation: aggregation,
          storage: storage,
          interface_type: interface_type,
          mappings: mappings} | acc]
     end)
-    {:ok, mapped_interfaces} 
+    {:ok, mapped_interfaces}
   end
 
 
@@ -142,133 +141,59 @@ defmodule Astarte.Export.FetchData do
       path = mapping.endpoint
       data_type = mapping.value_type
       data_field = CQLUtils.type_to_db_column_name(data_type)
+      IO.puts("reached individual_datastreams")
+      with {:ok, result} <- 
+        Queries.retrieve_individual_datastreams( conn, realm, device_id, interface_id, endpoint_id, path, data_field, options),
+        [value|_] = result_list <- Enum.to_list(result) do
+        IO.inspect result
+        values =
+          Enum.map(result_list,fn map ->
+            atom_data_field = String.to_atom(data_field)
+            return_value = map[atom_data_field]
+            value = from_native_type(return_value, data_type)
 
-      {:ok, result} =
-        Queries.retrieve_individual_datastreams(
-          conn,
-          realm,
-          device_id,
-          interface_id,
-          endpoint_id,
-          path,
-          data_field,
-          options
-        )
+            reception_timestamp =
+              map[:reception_timestamp]
+              |> DateTime.from_unix!(:millisecond)
+              |> DateTime.to_iso8601()
 
-      values =
-        Enum.to_list(result)
-        |> Enum.map(fn map ->
-          atom_data_field = String.to_atom(data_field)
-          return_value = map[atom_data_field]
-          value = from_native_type(return_value, data_type)
-
-          reception_timestamp =
-            map[:reception_timestamp]
-            |> DateTime.from_unix!(:millisecond)
-            |> DateTime.to_iso8601()
-
-          %{value: value, reception_timestamp: reception_timestamp}
-        end)
-
-      case values do
-        [] ->
-          acc1
-
-        _ ->
-          [%{path: path, aggregation: :individual, value: values} | acc1]
-      end
-    end)
-  end
-
-  def fetch_object_datastreams(conn, realm, [h | _] = mappings, device_id, storage, options) do
-    fullpath = h.endpoint
-    [_, endpointprefix, _] = String.split(fullpath, "/")
-    path = "/" <> endpointprefix
-
-    extract_2nd_level_params =
-      Enum.reduce(mappings, [], fn mapping, acc1 ->
-        path = mapping.endpoint
-        [_, _, suffix] = String.split(path, "/")
-        data_type = mapping.value_type
-        [%{suffix_path: suffix, data_type: data_type} | acc1]
-      end)
-
-    {:ok, result} =
-      Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path, options)
-
-    result1 = Enum.to_list(result)
-
-    value =
-      Enum.reduce(result1, %{}, fn map, acc ->
-        reception_timestamp =
-          map[:reception_timestamp]
-          |> DateTime.from_unix!(:millisecond)
-          |> DateTime.to_iso8601()
-
-        list = Map.to_list(map)
-
-        value_list =
-          List.foldl(list, [], fn {key, value}, acc1 ->
-            with "v_" <> item <- to_string(key),
-                 match_object when match_object != nil <-
-                   Enum.find(extract_2nd_level_params, fn map1 -> map1[:suffix_path] == item end),
-                 data_type = match_object[:data_type],
-                 token = "/" <> match_object[:suffix_path],
-                 value1 when value1 != "" <- from_native_type(value, data_type) do
-              [%{name: token, value: value1} | acc1]
-            else
-              _ -> acc1
-            end
+            %{value: value, attributes: [reception_timestamp: reception_timestamp]}
           end)
-
-        case acc == %{} do
-          true ->
-            %{
-              path: path,
-              aggregation: :object,
-              value: [%{reception_timestamp: reception_timestamp, value: value_list}]
-            }
-
-          false ->
-            inner_list = acc.value
-
-            updated_list =
-              [%{reception_timestamp: reception_timestamp, value: value_list}] ++ inner_list
-
-            %{acc | value: updated_list}
-        end
-      end)
-
-    [value]
+        {:more_data, values, []}
+     else
+       [] -> {:ok, :completed} 
+     end
   end
 
-  defp fetch_individual_properties(conn, realm, mappings, device_id, interface_id, options) do
-    Enum.reduce(mappings, [], fn mapping, acc1 ->
+  def fetch_individual_properties(conn, realm, mapping, device_id, interface_id, options) do
       endpoint_id = mapping.endpoint_id
       path = mapping.endpoint
       data_type = mapping.value_type
       data_field = CQLUtils.type_to_db_column_name(data_type)
 
-      {:ok, result} =
-        Queries.retrieve_individual_properties(conn, realm, device_id, interface_id, data_field, options)
+      with {:ok, result} <- Queries.retrieve_individual_properties(conn, realm, device_id, interface_id, data_field, options), 
+        [value | _]=result_list  <- Enum.to_list(result) do
+        IO.inspect result_list
+        values =
+          Enum.map(result_list, fn map ->
+            reception_timestamp =
+              map.reception_timestamp
+              |> DateTime.from_unix!(:millisecond)
+              |> DateTime.to_iso8601()
 
-      values =
-        Enum.to_list(result)
-        |> Enum.map(fn map ->
-          reception_timestamp =
-            map[:reception_timestamp]
-            |> DateTime.from_unix!(:millisecond)
-            |> DateTime.to_iso8601()
+            path = map.path |> Kernel.to_string()
 
-          path = map[:path] |> Kernel.to_string()
+            atom_data_field = String.to_atom(data_field)
+            return_value = map[atom_data_field]
+            value = from_native_type(return_value, data_type)
 
-          atom_data_field = String.to_atom(data_field)
-          return_value = map[atom_data_field]
-          value = from_native_type(return_value, data_type)
-
-          %{reception_timestamp: reception_timestamp, path: path, value: value}
-        end)
-    end)
+            %{attributes: [reception_timestamp: reception_timestamp, path: path], value: value}
+         end)
+        {:more_data, values, []}
+      else
+        [] -> {:ok, :completed}
+        {:error, reason} -> {:error, reason}
+      end
   end
 
   defp from_native_type(value_chars, :double) do

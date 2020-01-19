@@ -28,17 +28,17 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"ascii", interface}, {"int", major_version}]
 
-    page_options = 
-	with page_size <- page_size when != nil Keyword.get(options, :page_size) do
-	  with paging_state <- when paging_state != nil Keyword.get(options, :paging_state) do
-	    [page_size: page_size, paging_state: paging_state]
-	  else
-	    nil -> [page_size: page_size]
-	  end
-	else
-	   nil -> []
-	end
-	
+    page_options =
+      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
+        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
+          [page_size: page_size, paging_state: paging_state]
+        else
+          nil -> [page_size: page_size]
+        end
+      else
+        nil -> []
+      end
+
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
     with {:ok, result} <- Xandra.execute(conn, interface_statement, params, options) do
@@ -58,7 +58,8 @@ defmodule Astarte.Export.FetchData.Queries do
   end
 
   def fetch_interface_descriptor(conn, realm, interface, major_version, options) do
-    with {:ok, interface_row} <- retrieve_interface_row(conn, realm, interface, major_version, options) do
+    with {:ok, interface_row} <-
+           retrieve_interface_row(conn, realm, interface, major_version, options) do
       interface_row
       |> Enum.to_list()
       |> hd
@@ -73,17 +74,17 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = []
 
-    page_options = 
-	with page_size <- page_size when != nil Keyword.get(options, :page_size) do
-	  with paging_state <- when paging_state != nil Keyword.get(options, :paging_state) do
-	    [page_size: page_size, paging_state: paging_state]
-	  else
-	    nil -> [page_size: page_size]
-	  end
-	else
-	   nil -> []
-	end
-	
+    page_options =
+      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
+        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
+          [page_size: page_size, paging_state: paging_state]
+        else
+          nil -> [page_size: page_size]
+        end
+      else
+        nil -> []
+      end
+
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
     with {:ok, result} = Xandra.execute(conn, devices_statement, params, options) do
@@ -112,17 +113,17 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"uuid", interface_id}]
 
-    page_options = 
-	with page_size <- page_size when != nil Keyword.get(options, :page_size) do
-	  with paging_state <- when paging_state != nil Keyword.get(options, :paging_state) do
-	    [page_size: page_size, paging_state: paging_state]
-	  else
-	    nil -> [page_size: page_size]
-	  end
-	else
-	   nil -> []
-	end
-	
+    page_options =
+      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
+        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
+          [page_size: page_size, paging_state: paging_state]
+        else
+          nil -> [page_size: page_size]
+        end
+      else
+        nil -> []
+      end
+
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
     with {:ok, result} = Xandra.execute(conn, mappings_statement, params, options) do
@@ -154,17 +155,17 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"uuid", device_id}, {"uuid", interface_id}]
 
-    page_options = 
-	with page_size <- page_size when != nil Keyword.get(options, :page_size) do
-	  with paging_state <- when paging_state != nil Keyword.get(options, :paging_state) do
-	    [page_size: page_size, paging_state: paging_state]
-	  else
-	    nil -> [page_size: page_size]
-	  end
-	else
-	   nil -> []
-	end
-	
+    page_options =
+      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
+        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
+          [page_size: page_size, paging_state: paging_state]
+        else
+          nil -> [page_size: page_size]
+        end
+      else
+        nil -> []
+      end
+
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
     with {:ok, result} = Xandra.execute(conn, properties_statement, params, options) do
@@ -196,7 +197,7 @@ defmodule Astarte.Export.FetchData.Queries do
         endpoint_id,
         path,
         data_type,
-		options
+        options
       ) do
     individual_datastream_statement = """
     SELECT #{data_type}, reception_timestamp FROM  #{realm}.individual_datastreams WHERE device_id=? AND
@@ -204,18 +205,18 @@ defmodule Astarte.Export.FetchData.Queries do
     """
 
     params = [{"uuid", device_id}, {"uuid", interface_id}, {"uuid", endpoint_id}, {"text", path}]
-	
-    page_options = 
-	with page_size <- page_size when != nil Keyword.get(options, :page_size) do
-	  with paging_state <- when paging_state != nil Keyword.get(options, :paging_state) do
-	    [page_size: page_size, paging_state: paging_state]
-	  else
-	    nil -> [page_size: page_size]
-	  end
-	else
-	   nil -> []
-	end
-	
+
+    page_options =
+      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
+        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
+          [page_size: page_size, paging_state: paging_state]
+        else
+          nil -> [page_size: page_size]
+        end
+      else
+        nil -> []
+      end
+
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
     with {:ok, result} = Xandra.execute(conn, individual_datastream_statement, params, options) do
@@ -248,40 +249,40 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"uuid", device_id}, {"text", path}]
 
-	page_options = 
-	with page_size <- page_size when != nil Keyword.get(options, :page_size) do
-	  with paging_state <- when paging_state != nil Keyword.get(options, :paging_state) do
-	    [page_size: page_size, paging_state: paging_state]
-	  else
-	    nil -> [page_size: page_size]
-	  end
-	else
-	   nil -> []
-	end
-	
-    options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options	
- 	
-	
-	{:ok, result} = Xandra.execute(conn, object_datastream_statement, params, options) do
-      {:ok, result}
-    else
-      {:error, %Xandra.Error{message: message} = err} ->
-        Logger.error("database error: #{inspect(message)}.",
-          realm: realm,
-          device_id: device_id,
-          tag: "database_error"
-        )
+    page_options =
+      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
+        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
+          [page_size: page_size, paging_state: paging_state]
+        else
+          nil -> [page_size: page_size]
+        end
+      else
+        nil -> []
+      end
 
-        {:error, :database_error}
+    options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
-      {:error, %Xandra.ConnectionError{} = err} ->
-        Logger.error("database connection error: #{inspect(err)}.",
-          realm: realm,
-          device_id: device_id,
-          tag: "database_connection_error"
-        )
+    with {:ok, result} <- 
+      Xandra.execute conn, object_datastream_statement, params, options do
+        {:ok, result}
+      else
+        {:error, %Xandra.Error{message: message} = err} ->
+          Logger.error("database error: #{inspect(message)}.",
+            realm: realm,
+            device_id: device_id,
+            tag: "database_error"
+          )
 
-        {:error, :database_connection_error}
-    end
+          {:error, :database_error}
+
+        {:error, %Xandra.ConnectionError{} = err} ->
+          Logger.error("database connection error: #{inspect(err)}.",
+            realm: realm,
+            device_id: device_id,
+            tag: "database_connection_error"
+          )
+
+          {:error, :database_connection_error}
+      end
   end
 end
