@@ -128,7 +128,7 @@ defmodule Astarte.Export do
     {:ok, interfaces_tag, state} = XMLStreamWriter.start_element(state, "interfaces", [])
     xml_data = :erlang.iolist_to_binary([interfaces_tag])
     IO.puts(file_descriptor, xml_data)
-
+    table_page_sizes = Application.get_env(:xandra, :cassandra_table_page_sizes)
     Enum.reduce(interfaces, state, fn interface_details, state ->
       %{
         interface: interface_attributes,
@@ -145,16 +145,16 @@ defmodule Astarte.Export do
 
       xml_data = :erlang.iolist_to_binary([interface_tag])
       IO.puts(file_descriptor, xml_data)
-
       state =
         case interface_type do
           :datastream ->
             case aggregation do
               :object ->
-                process_object_datastreams(conn, realm, file_descriptor, state, mappings, device_id, storage,[])
-                state
-
+                page_size = Keyword.get(table_page_sizes, :object_datastreams)
+                process_object_datastreams(conn, realm, file_descriptor, state, mappings, device_id, storage,[page_size: page_size])
+                
               :individual ->
+                page_size = Keyword.get(table_page_sizes, :individual_datastreams)
                 process_individual_datastreams(
                   conn,
                   realm,
@@ -163,11 +163,12 @@ defmodule Astarte.Export do
                   mappings,
                   device_id,
                   interface_id,
-                  []
+                  [page_size: page_size]
                 )
             end
 
           :properties ->
+            page_size = Keyword.get(table_page_sizes, :individual_properties)
             process_individual_properties(
               conn,
               realm,
@@ -176,7 +177,7 @@ defmodule Astarte.Export do
               mappings,
               device_id,
               interface_id,
-              []
+              [page_size: page_size]
             )
         end
 
@@ -335,7 +336,6 @@ defmodule Astarte.Export do
        ) do
     with {:more_data, data, updated_options} <-
       FetchData.fetch_object_datastreams(conn, realm, path, sub_paths_info, device_id, storage, opts) do
-      IO.inspect data
       state = generate_object_datastream_xml(file_descriptor, state, data) 
       paging_state = Keyword.get(updated_options, :paging_state)
       case paging_state do

@@ -169,7 +169,7 @@ defmodule Astarte.Export.FetchData do
              options
            ),
          [value | _] = result_list <- Enum.to_list(result) do
-
+      updated_options = Keyword.put(options, :paging_state, result.paging_state)
       values =
         Enum.map(result_list, fn map ->
           atom_data_field = String.to_atom(data_field)
@@ -184,14 +184,15 @@ defmodule Astarte.Export.FetchData do
           %{value: value, attributes: [reception_timestamp: reception_timestamp]}
         end)
 
-      {:more_data, values, []}
+      {:more_data, values, updated_options}
     else
       [] -> {:ok, :completed}
     end
   end
   
-  def fetch_object_datastreams(conn, realm, path, extract_2nd_level_params, device_id, storage, opts) do
-    with {:ok, result} <- Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path, opts) do
+  def fetch_object_datastreams(conn, realm, path, extract_2nd_level_params, device_id, storage, options) do
+    with {:ok, result} <- Queries.retrieve_object_datastream_value(conn, realm, storage, device_id, path, options) do
+      updated_options = Keyword.put(options, :paging_state, result.paging_state) 
       result_list = Enum.to_list(result)
       values =  
       Enum.reduce(result_list, [], fn map, acc ->
@@ -216,7 +217,7 @@ defmodule Astarte.Export.FetchData do
           end)
         acc ++ [%{attributes: [reception_timestamp: reception_timestamp], value: value_list}]
       end)
-      {:more_data, values, []}  
+      {:more_data, values, updated_options}  
     else
       {:error, reason} -> {:error, reason}
     end 
@@ -238,7 +239,7 @@ defmodule Astarte.Export.FetchData do
              options
            ),
          [value | _] = result_list <- Enum.to_list(result) do
-
+      updated_options = Keyword.put(options, :paging_state, result.paging_state)
       values =
         Enum.map(result_list, fn map ->
           reception_timestamp =
@@ -255,7 +256,7 @@ defmodule Astarte.Export.FetchData do
           %{attributes: [reception_timestamp: reception_timestamp, path: path], value: value}
         end)
 
-      {:more_data, values, []}
+      {:more_data, values, updated_options}
     else
       [] -> {:ok, :completed}
       {:error, reason} -> {:error, reason}

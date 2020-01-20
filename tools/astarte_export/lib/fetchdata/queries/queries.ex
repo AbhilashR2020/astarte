@@ -28,16 +28,7 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"ascii", interface}, {"int", major_version}]
 
-    page_options =
-      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
-        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
-          [page_size: page_size, paging_state: paging_state]
-        else
-          nil -> [page_size: page_size]
-        end
-      else
-        nil -> []
-      end
+    page_options = get_page_options(options)
 
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
@@ -74,16 +65,7 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = []
 
-    page_options =
-      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
-        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
-          [page_size: page_size, paging_state: paging_state]
-        else
-          nil -> [page_size: page_size]
-        end
-      else
-        nil -> []
-      end
+    page_options = get_page_options(options)
 
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
@@ -113,16 +95,7 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"uuid", interface_id}]
 
-    page_options =
-      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
-        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
-          [page_size: page_size, paging_state: paging_state]
-        else
-          nil -> [page_size: page_size]
-        end
-      else
-        nil -> []
-      end
+    page_options = get_page_options(options)
 
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
@@ -155,16 +128,7 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"uuid", device_id}, {"uuid", interface_id}]
 
-    page_options =
-      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
-        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
-          [page_size: page_size, paging_state: paging_state]
-        else
-          nil -> [page_size: page_size]
-        end
-      else
-        nil -> []
-      end
+    page_options = get_page_options(options)
 
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
@@ -206,16 +170,7 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"uuid", device_id}, {"uuid", interface_id}, {"uuid", endpoint_id}, {"text", path}]
 
-    page_options =
-      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
-        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
-          [page_size: page_size, paging_state: paging_state]
-        else
-          nil -> [page_size: page_size]
-        end
-      else
-        nil -> []
-      end
+    page_options = get_page_options(options)
 
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
@@ -249,16 +204,7 @@ defmodule Astarte.Export.FetchData.Queries do
 
     params = [{"uuid", device_id}, {"text", path}]
 
-    page_options =
-      with page_size when page_size != nil <- Keyword.get(options, :page_size) do
-        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
-          [page_size: page_size, paging_state: paging_state]
-        else
-          nil -> [page_size: page_size]
-        end
-      else
-        nil -> []
-      end
+    page_options = get_page_options(options)
 
     options = [uuid_format: :binary, timestamp_format: :integer] ++ page_options
 
@@ -285,4 +231,17 @@ defmodule Astarte.Export.FetchData.Queries do
         {:error, :database_connection_error}
     end
   end
+
+  defp get_page_options(options) do
+    with page_size when page_size != nil <- Keyword.get(options, :page_size) do
+        with paging_state when paging_state != nil <- Keyword.get(options, :paging_state) do
+          [page_size: page_size, paging_state: paging_state]
+        else
+          nil -> [page_size: page_size]
+        end
+      else
+        nil -> []
+      end
+  end
+
 end
