@@ -18,6 +18,7 @@
 
 defmodule Astarte.Export do
   alias Astarte.Export.FetchData
+  alias Astarte.Export.XMLGenerate
   require Logger
 
   @moduledoc """
@@ -50,49 +51,40 @@ defmodule Astarte.Export do
   defp generate_xml(realm, file) do
     Logger.info("Export started .", realm: realm, tag: "export_started")
 
-    with {:ok, file_descriptor} = File.open(file, [:write]),
-         {:ok, doc, state} <- XMLStreamWriter.new_document(),
-         {:ok, header, state} <- XMLStreamWriter.start_document(state),
-         {:ok, astarte_tag, state} <- XMLStreamWriter.start_element(state, "astarte", []),
-         {:ok, devices_tag, state} <- XMLStreamWriter.start_element(state, "devices", []),
-         xml_data <- :erlang.iolist_to_binary([doc, header, astarte_tag, devices_tag]),
-         :ok <- IO.puts(file_descriptor, xml_data),
+    with {:ok, fd} = File.open(file, [:write]),
+         {:ok, state} <- XMLGenerate.xml_write(:default_header,fd),
+         {:ok, state} <- XMLGenerate.xml_write(:start_tag, fd, {"astarte",[]},state),
+         {:ok, state} <- XMLGenerate.xml_write(:start_tag, fd, {"devices",[]},state),  
          {:ok, conn} <- FetchData.db_connection_identifier(),
-         {:ok, :finished, state} <- generate_xml(conn, realm, file_descriptor, [], state) do
-         {:ok, devices_end_tag, state} = XMLStreamWriter.end_element(state)
-         {:ok, astarte_end_tag, state} = XMLStreamWriter.end_element(state) 
-         xml_data = :erlang.iolist_to_binary([devices_end_tag, astarte_end_tag])
-         IO.puts(file_descriptor, xml_data)
-         File.close(file_descriptor)
+         {:ok, :finished, state} <- generate_xml(conn, realm, fd, [], state) do
+         {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state)
+         {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state)
+         File.close(fd)
     else
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp generate_xml(conn, realm, file_descriptor, opts, state) do
+  defp generate_xml(conn, realm, fd, options, state) do
     with {:more_data, device_data, updated_options} <-
-           FetchData.fetch_device_data(conn, realm, opts),
-         mapped_device_data = FetchData.process_device_data(device_data) do
-      {:ok, xml_data, state} = construct_device_xml_tags(mapped_device_data, state)
-      IO.puts(file_descriptor, xml_data)
+      FetchData.fetch_device_data(conn, realm, options),
+      mapped_device_data = FetchData.process_device_data(device_data) do
+      {:ok, state} = construct_device_xml_tags(mapped_device_data, fd, state)
       {:ok, interfaces} = FetchData.get_interface_details(conn, realm, device_data)
-      state = process_interfaces(conn, realm, file_descriptor, state, interfaces)
-      {:ok, device_end_tag, state} = XMLStreamWriter.end_element(state)
-      xml_data = :erlang.iolist_to_binary([device_end_tag])
-      IO.puts(file_descriptor, xml_data)
-      generate_xml(conn, realm, file_descriptor, updated_options, state)
+      state = process_interfaces(conn, realm, fd, state, interfaces)
+      {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state)
+      generate_xml(conn, realm, fd, updated_options, state)
     else
       {:ok, :completed} ->
         Logger.info("Export Completed.", realm: realm, tag: "export_completed")
         {:ok, :finished, state}
-
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  def construct_device_xml_tags(device_data, state) do
+  def construct_device_xml_tags(device_data, fd, state) do
     %{
       device: device,
       protocol: protocol,
@@ -101,34 +93,17 @@ defmodule Astarte.Export do
       stats: stats
     } = device_data
 
-    {:ok, device_tag, state} = XMLStreamWriter.start_element(state, "device", device)
-    {:ok, protocol_tag, state} = XMLStreamWriter.empty_element(state, "protocol", protocol)
-
-    {:ok, registration_tag, state} =
-      XMLStreamWriter.empty_element(state, "registration", registration)
-
-    {:ok, credentials_tag, state} =
-      XMLStreamWriter.empty_element(state, "credentials", credentials)
-
-    {:ok, stats_tag, state} = XMLStreamWriter.empty_element(state, "stats", stats)
-
-    xml_data =
-      :erlang.iolist_to_binary([
-        device_tag,
-        protocol_tag,
-        registration_tag,
-        credentials_tag,
-        stats_tag
-      ])
-
-    {:ok, xml_data, state}
+    {:ok, state} = XMLGenerate.xml_write(:start_tag, fd, {"device", device}, state)
+    {:ok, state} = XMLGenerate.xml_write(:empty_element, fd, {"protocol", protocol, []}, state)
+    {:ok, state} = XMLGenerate.xml_write(:empty_element, fd, {"registration", registration, []}, state)
+    {:ok, state} = XMLGenerate.xml_write(:empty_element, fd, {"credentials", credentials, []}, state)
+    {:ok, state} = XMLGenerate.xml_write(:empty_element, fd, {"stats", stats, []}, state)
   end
 
-  def process_interfaces(conn, realm, file_descriptor, state, interfaces) do
-    {:ok, interfaces_tag, state} = XMLStreamWriter.start_element(state, "interfaces", [])
-    xml_data = :erlang.iolist_to_binary([interfaces_tag])
-    IO.puts(file_descriptor, xml_data)
+  def process_interfaces(conn, realm, fd, state, interfaces) do
+    {:ok, state} = XMLGenerate.xml_write(:start_tag, fd, {"interfaces", []}, state)
     table_page_sizes = Application.get_env(:xandra, :cassandra_table_page_sizes)
+    state = 
     Enum.reduce(interfaces, state, fn interface_details, state ->
       %{
         interface: interface_attributes,
@@ -139,26 +114,23 @@ defmodule Astarte.Export do
         interface_type: interface_type,
         mappings: mappings
       } = interface_details
+      
+      {:ok, state} = XMLGenerate.xml_write(:start_tag, fd, {"interface", interface_attributes}, state) 
 
-      {:ok, interface_tag, state} =
-        XMLStreamWriter.start_element(state, "interface", interface_attributes)
-
-      xml_data = :erlang.iolist_to_binary([interface_tag])
-      IO.puts(file_descriptor, xml_data)
       state =
         case interface_type do
           :datastream ->
             case aggregation do
               :object ->
                 page_size = Keyword.get(table_page_sizes, :object_datastreams)
-                process_object_datastreams(conn, realm, file_descriptor, state, mappings, device_id, storage,[page_size: page_size])
+                process_object_datastreams(conn, realm, fd, state, mappings, device_id, storage,[page_size: page_size])
                 
               :individual ->
                 page_size = Keyword.get(table_page_sizes, :individual_datastreams)
                 process_individual_datastreams(
                   conn,
                   realm,
-                  file_descriptor,
+                  fd,
                   state,
                   mappings,
                   device_id,
@@ -172,7 +144,7 @@ defmodule Astarte.Export do
             process_individual_properties(
               conn,
               realm,
-              file_descriptor,
+              fd,
               state,
               mappings,
               device_id,
@@ -180,16 +152,10 @@ defmodule Astarte.Export do
               [page_size: page_size]
             )
         end
-
-      {:ok, end_tag, state} = XMLStreamWriter.end_element(state)
-      xml_data = :erlang.iolist_to_binary([end_tag])
-      IO.puts(file_descriptor, xml_data)
+      {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state) 
       state
     end)
-
-    {:ok, end_tag, state} = XMLStreamWriter.end_element(state)
-    xml_data = :erlang.iolist_to_binary([end_tag])
-    IO.puts(file_descriptor, xml_data)
+    {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state)
     state
   end
 
@@ -197,7 +163,7 @@ defmodule Astarte.Export do
   defp process_object_datastreams(
          conn,
          realm,
-         file_descriptor,
+         fd,
          state,
          mappings,
          device_id,
@@ -216,13 +182,13 @@ defmodule Astarte.Export do
         data_type = mapping.value_type
         [%{suffix_path: suffix, data_type: data_type} | acc1]
       end)
-    {:ok, start_tag, state} = XMLStreamWriter.start_element(state, "datastream", [path: path]) 
-    xml_data = :erlang.iolist_to_binary([start_tag])
-    IO.puts(file_descriptor, xml_data)
+
+    {:ok, state} = XMLGenerate.xml_write(:start_tag, fd, {"datastream", [path: path]}, state) 
+
     fetch_object_datastreams(
       conn,
       realm,
-      file_descriptor,
+      fd,
       state,
       path,
       sub_paths_info, 
@@ -230,9 +196,8 @@ defmodule Astarte.Export do
       storage,
       opts
     )
-   {:ok, end_tag, state} = XMLStreamWriter.end_element(state)
-   xml_data = :erlang.iolist_to_binary([end_tag])
-   IO.puts(file_descriptor, xml_data)
+
+   {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state) 
    state
   end
 
@@ -243,39 +208,34 @@ defmodule Astarte.Export do
   defp process_individual_datastreams(
          conn,
          realm,
-         file_descriptor,
+         fd,
          state,
          [mapping | rem_mappings],
          device_id,
          interface_id,
          opts
        ) do
-    {:ok, datastream_start_tag, state} =
-      XMLStreamWriter.start_element(state, "datastream", path: mapping.endpoint)
 
-    xml_data = :erlang.iolist_to_binary([datastream_start_tag])
-    IO.puts(file_descriptor, xml_data)
+    {:ok, state} = XMLGenerate.xml_write(:start_tag, fd, {"datastream", [path: mapping.endpoint]}, state) 
 
     {:ok, :completed, state} =
       fetch_individual_datastreams(
         conn,
         realm,
-        file_descriptor,
+        fd,
         state,
         mapping,
         device_id,
         interface_id,
         opts
       )
-
-    {:ok, datastream_end_tag, state} = XMLStreamWriter.end_element(state)
-    xml_data = :erlang.iolist_to_binary([datastream_end_tag])
-    IO.puts(file_descriptor, xml_data)
-
+     
+    {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state) 
+    
     process_individual_datastreams(
       conn,
       realm,
-      file_descriptor,
+      fd,
       state,
       rem_mappings,
       device_id,
@@ -291,7 +251,7 @@ defmodule Astarte.Export do
   defp process_individual_properties(
          conn,
          realm,
-         file_descriptor,
+         fd,
          state,
          [mapping | rem_mappings],
          device_id,
@@ -302,7 +262,7 @@ defmodule Astarte.Export do
       fetch_individual_properties(
         conn,
         realm,
-        file_descriptor,
+        fd,
         state,
         mapping,
         device_id,
@@ -314,7 +274,7 @@ defmodule Astarte.Export do
     process_individual_properties(
       conn,
       realm,
-      file_descriptor,
+      fd,
       state,
       rem_mappings,
       device_id,
@@ -326,7 +286,7 @@ defmodule Astarte.Export do
   defp fetch_object_datastreams(
          conn,
          realm,
-         file_descriptor,
+         fd,
          state,
          path,
          sub_paths_info,
@@ -336,15 +296,17 @@ defmodule Astarte.Export do
        ) do
     with {:more_data, data, updated_options} <-
       FetchData.fetch_object_datastreams(conn, realm, path, sub_paths_info, device_id, storage, opts) do
-      state = generate_object_datastream_xml(file_descriptor, state, data) 
+      state = generate_object_datastream_xml(fd, state, data) 
       paging_state = Keyword.get(updated_options, :paging_state)
       case paging_state do
         nil ->
           {:ok, :completed, state}
         _ ->
-          FetchData.fetch_object_datastreams(
+          fetch_object_datastreams(
             conn,
             realm,
+            fd, 
+            state,
             path,
             sub_paths_info,
             device_id,
@@ -361,7 +323,7 @@ defmodule Astarte.Export do
   defp fetch_individual_datastreams(
          conn,
          realm,
-         file_descriptor,
+         fd,
          state,
          mapping,
          device_id,
@@ -369,7 +331,7 @@ defmodule Astarte.Export do
          opts
        ) do
     with {:more_data, data, updated_options} <-
-           FetchData.fetch_individual_datastreams(
+      FetchData.fetch_individual_datastreams(
              conn,
              realm,
              mapping,
@@ -377,7 +339,7 @@ defmodule Astarte.Export do
              interface_id,
              opts
            ) do
-      state = generate_individual_datastream_xml(file_descriptor, state, data)
+      state = generate_individual_datastream_xml(fd, state, data)
       paging_state = Keyword.get(updated_options, :paging_state)
 
       case paging_state do
@@ -388,7 +350,7 @@ defmodule Astarte.Export do
           fetch_individual_datastreams(
             conn,
             realm,
-            file_descriptor,
+            fd,
             state,
             mapping,
             device_id,
@@ -405,7 +367,7 @@ defmodule Astarte.Export do
   defp fetch_individual_properties(
          conn,
          realm,
-         file_descriptor,
+         fd,
          state,
          mapping,
          device_id,
@@ -421,7 +383,7 @@ defmodule Astarte.Export do
              interface_id,
              opts
            ) do
-      state = generate_individual_properties_xml(file_descriptor, state, data)
+      state = generate_individual_properties_xml(fd, state, data)
       paging_state = Keyword.get(updated_options, :paging_state)
 
       case paging_state do
@@ -432,7 +394,7 @@ defmodule Astarte.Export do
           fetch_individual_properties(
             conn,
             realm,
-            file_descriptor,
+            fd,
             state,
             mapping,
             device_id,

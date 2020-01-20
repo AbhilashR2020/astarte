@@ -27,7 +27,7 @@ defmodule Astarte.Export.FetchData do
 
   def process_device_data(device_data) do
     device_id = Device.encode_device_id(device_data.device_id)
-    revision = device_data.protocol_revision
+    revision = to_string(device_data.protocol_revision)
 
     pending_empty_cache =
       device_data.pending_empty_cache
