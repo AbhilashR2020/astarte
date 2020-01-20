@@ -428,57 +428,42 @@ defmodule Astarte.Export do
     state
   end
 
-  def generate_individual_datastream_xml(file_descriptor, state, [h | t]) do
+  def generate_individual_datastream_xml(fd, state, [h | t]) do
     %{value: value, attributes: attributes} = h
-    {:ok, start_tag, state} = XMLStreamWriter.start_element(state, "value", attributes)
-    {:ok, data, state} = XMLStreamWriter.characters(state, value)
-    {:ok, end_tag, state} = XMLStreamWriter.end_element(state)
-    xml_data = :erlang.iolist_to_binary([start_tag, data, end_tag])
-    IO.puts(file_descriptor, xml_data)
-    generate_individual_datastream_xml(file_descriptor, state, t)
+    {:ok, state} = XMLGenerate.xml_write(:full_element, fd, {"value", attributes, value}, state) 
+    generate_individual_datastream_xml(fd, state, t)
   end
 
   def generate_individual_properties_xml(_, state, []) do
     state
   end
 
-  def generate_individual_properties_xml(file_descriptor, state, [h | t]) do
+  def generate_individual_properties_xml(fd, state, [h | t]) do
     %{value: value, attributes: attributes} = h
-    {:ok, start_tag, state} = XMLStreamWriter.start_element(state, "property", attributes)
-    {:ok, data, state} = XMLStreamWriter.characters(state, value)
-    {:ok, end_tag, state} = XMLStreamWriter.end_element(state)
-    xml_data = :erlang.iolist_to_binary([start_tag, data, end_tag])
-    IO.puts(file_descriptor, xml_data)
-    generate_individual_datastream_xml(file_descriptor, state, t)
+    {:ok, state} = XMLGenerate.xml_write(:full_element, fd, {"property", attributes, value}, state)
+    generate_individual_datastream_xml(fd, state, t)
   end
 
   def generate_object_datastream_xml(_,state,[]) do
     state
   end
 
-  def generate_object_datastream_xml(file_descriptor, state, [h | t]) do
+  def generate_object_datastream_xml(fd, state, [h | t]) do
     %{attributes: attributes, value: value} = h
-    {:ok, start_tag, state} = XMLStreamWriter.start_element(state, "object", attributes)
-    xml_data = :erlang.iolist_to_binary([start_tag])
-    IO.puts(file_descriptor, xml_data)
-    state = generate_object_item_xml(file_descriptor, state, value)
-    {:ok, end_tag, state} = XMLStreamWriter.end_element(state)
-    xml_data = :erlang.iolist_to_binary([end_tag])
-    IO.puts(file_descriptor, xml_data)
-    generate_object_datastream_xml(file_descriptor, state, t)
+    {:ok, state} = XMLGenerate.xml_write(:start_tag, fd, {"object", attributes}, state) 
+    state = generate_object_item_xml(fd, state, value)
+    {:ok, state} = XMLGenerate.xml_write(:end_tag, fd, state)
+    generate_object_datastream_xml(fd, state, t)
   end
 
   def generate_object_item_xml(_, state, []) do
     state
   end
 
-  def generate_object_item_xml(file_descriptor, state, [h | t]) do
+  def generate_object_item_xml(fd, state, [h | t]) do
     %{attributes: attributes, value: value} = h
-    {:ok, start_tag, state} = XMLStreamWriter.start_element(state, "item", attributes) 
-    {:ok, data, state} = XMLStreamWriter.characters(state, value)
-    {:ok, end_tag, state} = XMLStreamWriter.end_element(state)
-    xml_data = :erlang.iolist_to_binary([start_tag, data, end_tag])
-    IO.puts(file_descriptor, xml_data)
-    generate_object_item_xml(file_descriptor, state, t)
+    {:ok, state} = XMLGenerate.xml_write(:full_element, fd, {"item", attributes, value}, state) 
+    generate_object_item_xml(fd, state, t)
   end
+
 end
